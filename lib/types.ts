@@ -45,6 +45,7 @@ export interface TodoItem {
   memo: string;
   progress: number;
   status: TodoStatus;
+  deadline: string | null;
   createdAt: string;
   updatedAt: string;
   doneAt: string | null;

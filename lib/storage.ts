@@ -193,7 +193,10 @@ export function getTodos(): TodoItem[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as TodoItem[];
+    return parsed.map((item) => ({
+      ...item,
+      deadline: item?.deadline ?? null,
+    })) as TodoItem[];
   } catch {
     return [];
   }
@@ -241,6 +244,33 @@ export function completeTodo(todos: TodoItem[], id: string): TodoItem[] {
 
 export function getTodoById(todos: TodoItem[], id: string): TodoItem | null {
   return todos.find((t) => t.id === id) ?? null;
+}
+
+function swapTodosByIds(
+  todos: TodoItem[],
+  idA: string,
+  idB: string
+): TodoItem[] {
+  const next = todos.slice();
+  const i = next.findIndex((t) => t.id === idA);
+  const j = next.findIndex((t) => t.id === idB);
+  if (i === -1 || j === -1) return todos;
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}
+
+export function moveTodoUp(todos: TodoItem[], id: string): TodoItem[] {
+  const openIds = todos.filter((t) => t.status === "open").map((t) => t.id);
+  const idx = openIds.indexOf(id);
+  if (idx <= 0) return todos;
+  return swapTodosByIds(todos, id, openIds[idx - 1]);
+}
+
+export function moveTodoDown(todos: TodoItem[], id: string): TodoItem[] {
+  const openIds = todos.filter((t) => t.status === "open").map((t) => t.id);
+  const idx = openIds.indexOf(id);
+  if (idx === -1 || idx === openIds.length - 1) return todos;
+  return swapTodosByIds(todos, id, openIds[idx + 1]);
 }
 
 export function clearAllTodos(): void {

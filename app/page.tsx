@@ -24,6 +24,8 @@ import {
   loadEvents,
   loadLastActivityAt,
   loadLogs,
+  moveTodoDown,
+  moveTodoUp,
   removeEvent,
   saveCheckins,
   saveEvents,
@@ -368,6 +370,7 @@ export default function Page() {
     title: string;
     memo: string;
     progress: number;
+    deadline: Date | null;
   }) => {
     const nowIso = new Date().toISOString();
     if (!todoForm) return;
@@ -378,6 +381,7 @@ export default function Page() {
         memo: input.memo,
         progress: input.progress,
         status: "open",
+        deadline: input.deadline ? input.deadline.toISOString() : null,
         createdAt: nowIso,
         updatedAt: nowIso,
         doneAt: null,
@@ -389,11 +393,20 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         progress: input.progress,
+        deadline: input.deadline ? input.deadline.toISOString() : null,
         updatedAt: nowIso,
       };
       persistTodos(updateTodo(todos, updated));
     }
     setTodoForm(null);
+  };
+
+  const handleMoveTodoUp = (id: string) => {
+    persistTodos(moveTodoUp(todos, id));
+  };
+
+  const handleMoveTodoDown = (id: string) => {
+    persistTodos(moveTodoDown(todos, id));
   };
 
   const handleTodoComplete = () => {
@@ -659,6 +672,8 @@ export default function Page() {
           onClose={() => setTodoManageOpen(false)}
           onAdd={() => setTodoForm({ mode: "add" })}
           onEdit={(todo) => setTodoForm({ mode: "edit", todo })}
+          onMoveUp={handleMoveTodoUp}
+          onMoveDown={handleMoveTodoDown}
           onDeleteDone={handleDeleteDoneTodo}
         />
       )}
