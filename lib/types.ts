@@ -13,6 +13,7 @@ export interface LogEntry {
   status: LogStatus;
   createdAt: string;
   updatedAt: string;
+  todoId?: string | null;
 }
 
 export interface EventEntry {
@@ -24,6 +25,7 @@ export interface EventEntry {
   memo: string;
   createdAt: string;
   updatedAt: string;
+  todoId?: string | null;
 }
 
 export interface CheckinEntry {
@@ -33,4 +35,17 @@ export interface CheckinEntry {
   checkedAt: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TodoStatus = "open" | "done";
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  memo: string;
+  progress: number;
+  status: TodoStatus;
+  createdAt: string;
+  updatedAt: string;
+  doneAt: string | null;
 }

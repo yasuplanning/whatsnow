@@ -1,4 +1,4 @@
-import type { CheckinEntry, EventEntry, LogEntry } from "./types";
+import type { CheckinEntry, EventEntry, LogEntry, TodoItem } from "./types";
 
 const HEADER = [
   "type",
@@ -10,6 +10,7 @@ const HEADER = [
   "チェックイン時刻",
   "メモ",
   "写真",
+  "todoTitle",
 ];
 
 function pad(n: number): string {
@@ -71,10 +72,19 @@ interface CsvRow {
   checkedAt: string;
   memo: string;
   photo: string;
+  todoTitle: string;
   sortKey: string;
 }
 
-function taskRow(t: LogEntry): CsvRow {
+function resolveTodoTitle(
+  todoMap: Map<string, TodoItem>,
+  todoId: string | null | undefined
+): string {
+  if (!todoId) return "";
+  return todoMap.get(todoId)?.title ?? "";
+}
+
+function taskRow(t: LogEntry, todoMap: Map<string, TodoItem>): CsvRow {
   return {
     type: "task",
     content: t.task,
@@ -85,11 +95,12 @@ function taskRow(t: LogEntry): CsvRow {
     checkedAt: "",
     memo: t.memo,
     photo: "",
+    todoTitle: resolveTodoTitle(todoMap, t.todoId ?? null),
     sortKey: t.startAt ?? "",
   };
 }
 
-function eventRow(e: EventEntry): CsvRow {
+function eventRow(e: EventEntry, todoMap: Map<string, TodoItem>): CsvRow {
   return {
     type: "event",
     content: e.content,
@@ -100,6 +111,7 @@ function eventRow(e: EventEntry): CsvRow {
     checkedAt: "",
     memo: e.memo,
     photo: e.photo ?? "",
+    todoTitle: resolveTodoTitle(todoMap, e.todoId ?? null),
     sortKey: e.timestamp ?? "",
   };
 }
@@ -115,6 +127,7 @@ function checkinRow(c: CheckinEntry): CsvRow {
     checkedAt: formatLocalDateTime(c.checkedAt),
     memo: "",
     photo: "",
+    todoTitle: "",
     sortKey: c.checkedAt ?? "",
   };
 }
@@ -122,11 +135,15 @@ function checkinRow(c: CheckinEntry): CsvRow {
 export function buildCsv(
   tasks: LogEntry[],
   events: EventEntry[],
-  checkins: CheckinEntry[]
+  checkins: CheckinEntry[],
+  todos: TodoItem[]
 ): string {
+  const todoMap = new Map<string, TodoItem>();
+  for (const t of todos) todoMap.set(t.id, t);
+
   const rows: CsvRow[] = [
-    ...tasks.map(taskRow),
-    ...events.map(eventRow),
+    ...tasks.map((t) => taskRow(t, todoMap)),
+    ...events.map((e) => eventRow(e, todoMap)),
     ...checkins.map(checkinRow),
   ];
   rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
@@ -145,6 +162,7 @@ export function buildCsv(
         r.checkedAt,
         r.memo,
         r.photo,
+        r.todoTitle,
       ]
         .map(escapeCsvField)
         .join(",")
@@ -157,10 +175,11 @@ export function downloadCsv(
   dateKey: string,
   tasks: LogEntry[],
   events: EventEntry[],
-  checkins: CheckinEntry[]
+  checkins: CheckinEntry[],
+  todos: TodoItem[]
 ): void {
   if (typeof window === "undefined") return;
-  const csv = buildCsv(tasks, events, checkins);
+  const csv = buildCsv(tasks, events, checkins, todos);
   const bom = "﻿";
   const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);

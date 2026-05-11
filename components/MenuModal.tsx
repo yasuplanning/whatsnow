@@ -8,6 +8,7 @@ interface Props {
   onAddPast: () => void;
   onAddEvent: () => void;
   onListEvents: () => void;
+  onManageTodos: () => void;
   onDelete: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function MenuModal({
   onAddPast,
   onAddEvent,
   onListEvents,
+  onManageTodos,
   onDelete,
 }: Props) {
   return (
@@ -42,6 +44,13 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           イベント一覧
+        </button>
+        <button
+          type="button"
+          onClick={onManageTodos}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          やるべきこと
         </button>
         <button
           type="button"

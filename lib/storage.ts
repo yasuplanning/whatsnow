@@ -1,9 +1,15 @@
-import type { CheckinEntry, EventEntry, LogEntry } from "./types";
+import type {
+  CheckinEntry,
+  EventEntry,
+  LogEntry,
+  TodoItem,
+} from "./types";
 
 const STORAGE_KEY = "whatsnow.logs.v1";
 const EVENT_STORAGE_KEY = "whatsnow.events.v1";
 const CHECKIN_STORAGE_KEY = "whatsnow.checkins.v1";
 const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
+const TODO_STORAGE_KEY = "whatsnow.todos.v1";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -16,7 +22,11 @@ export function loadLogs(): LogEntry[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({ ...item, type: "task" as const })) as LogEntry[];
+    return parsed.map((item) => ({
+      ...item,
+      type: "task" as const,
+      todoId: item?.todoId ?? null,
+    })) as LogEntry[];
   } catch {
     return [];
   }
@@ -66,7 +76,11 @@ export function loadEvents(): EventEntry[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({ ...item, type: "event" as const })) as EventEntry[];
+    return parsed.map((item) => ({
+      ...item,
+      type: "event" as const,
+      todoId: item?.todoId ?? null,
+    })) as EventEntry[];
   } catch {
     return [];
   }
@@ -167,6 +181,72 @@ export function clearLastActivityAt(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function getTodos(): TodoItem[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = window.localStorage.getItem(TODO_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as TodoItem[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveTodos(todos: TodoItem[]): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(TODO_STORAGE_KEY, JSON.stringify(todos));
+  } catch {
+    // ignore
+  }
+}
+
+export function addTodo(todos: TodoItem[], item: TodoItem): TodoItem[] {
+  return [...todos, item];
+}
+
+export function updateTodo(todos: TodoItem[], item: TodoItem): TodoItem[] {
+  const idx = todos.findIndex((t) => t.id === item.id);
+  if (idx === -1) return [...todos, item];
+  const next = todos.slice();
+  next[idx] = item;
+  return next;
+}
+
+export function deleteTodo(todos: TodoItem[], id: string): TodoItem[] {
+  return todos.filter((t) => t.id !== id);
+}
+
+export function completeTodo(todos: TodoItem[], id: string): TodoItem[] {
+  const nowIso = new Date().toISOString();
+  return todos.map((t) =>
+    t.id === id
+      ? {
+          ...t,
+          status: "done" as const,
+          progress: 100,
+          doneAt: nowIso,
+          updatedAt: nowIso,
+        }
+      : t
+  );
+}
+
+export function getTodoById(todos: TodoItem[], id: string): TodoItem | null {
+  return todos.find((t) => t.id === id) ?? null;
+}
+
+export function clearAllTodos(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(TODO_STORAGE_KEY);
   } catch {
     // ignore
   }

@@ -1,14 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CheckinEntry, EventEntry, LogEntry } from "@/lib/types";
+import type {
+  CheckinEntry,
+  EventEntry,
+  LogEntry,
+  TodoItem,
+} from "@/lib/types";
 import {
+  addTodo,
   clearAllCheckins,
   clearAllEvents,
   clearAllLogs,
+  clearAllTodos,
   clearLastActivityAt,
+  completeTodo,
+  deleteTodo,
   findActiveLog,
   generateId,
+  getTodoById,
+  getTodos,
   loadCheckins,
   loadEvents,
   loadLastActivityAt,
@@ -18,6 +29,8 @@ import {
   saveEvents,
   saveLastActivityAt,
   saveLogs,
+  saveTodos,
+  updateTodo,
   upsertCheckin,
   upsertEvent,
   upsertLog,
@@ -38,6 +51,10 @@ import EventModal from "@/components/EventModal";
 import EventListModal from "@/components/EventListModal";
 import CheckinModal from "@/components/CheckinModal";
 import EditActiveTaskModal from "@/components/EditActiveTaskModal";
+import TodoManageModal from "@/components/TodoManageModal";
+import TodoQuickPickModal from "@/components/TodoQuickPickModal";
+import TodoFormModal from "@/components/TodoFormModal";
+import TodoFollowupModal from "@/components/TodoFollowupModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -47,13 +64,19 @@ type Phase =
   | { kind: "active" }
   | { kind: "askEnd" };
 
+type TodoFormState =
+  | { mode: "add" }
+  | { mode: "edit"; todo: TodoItem };
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [events, setEvents] = useState<EventEntry[]>([]);
   const [checkins, setCheckins] = useState<CheckinEntry[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
   const [task, setTask] = useState<string>("");
+  const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -63,11 +86,19 @@ export default function Page() {
   const [eventListOpen, setEventListOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [todoManageOpen, setTodoManageOpen] = useState(false);
+  const [todoQuickPickOpen, setTodoQuickPickOpen] = useState(false);
+  const [todoForm, setTodoForm] = useState<TodoFormState | null>(null);
+  const [todoFollowup, setTodoFollowup] = useState<TodoItem | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
 
   const activeLog = useMemo(() => findActiveLog(logs), [logs]);
+  const pendingTodo = useMemo(
+    () => (pendingTodoId ? getTodoById(todos, pendingTodoId) : null),
+    [pendingTodoId, todos]
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -75,6 +106,7 @@ export default function Page() {
     setLogs(loaded);
     setEvents(loadEvents());
     setCheckins(loadCheckins());
+    setTodos(getTodos());
     setLastActivityAt(loadLastActivityAt());
     if (findActiveLog(loaded)) {
       setPhase({ kind: "active" });
@@ -132,6 +164,11 @@ export default function Page() {
     saveCheckins(next);
   }, []);
 
+  const persistTodos = useCallback((next: TodoItem[]) => {
+    setTodos(next);
+    saveTodos(next);
+  }, []);
+
   const markActivity = useCallback(() => {
     const iso = new Date().toISOString();
     setLastActivityAt(iso);
@@ -159,9 +196,11 @@ export default function Page() {
       status: "active",
       createdAt: nowIso,
       updatedAt: nowIso,
+      todoId: pendingTodoId,
     };
     persist(upsertLog(logs, entry));
     setTask("");
+    setPendingTodoId(null);
     setPhase({ kind: "active" });
     markActivity();
   };
@@ -204,6 +243,14 @@ export default function Page() {
     plannedEndNotifiedRef.current.delete(activeLog.id);
     setPhase({ kind: "initial" });
     markActivity();
+
+    const todoId = updated.todoId ?? null;
+    if (todoId) {
+      const linked = getTodoById(todos, todoId);
+      if (linked && linked.status === "open") {
+        setTodoFollowup(linked);
+      }
+    }
   };
 
   const handleExport = (dateKey: string) => {
@@ -213,7 +260,7 @@ export default function Page() {
       checkins,
       dateKey
     );
-    downloadCsv(dateKey, tasks, dayEvents, dayCheckins);
+    downloadCsv(dateKey, tasks, dayEvents, dayCheckins, todos);
     setExportOpen(false);
     setMenuOpen(false);
   };
@@ -222,11 +269,14 @@ export default function Page() {
     clearAllLogs();
     clearAllEvents();
     clearAllCheckins();
+    clearAllTodos();
     clearLastActivityAt();
     setLogs([]);
     setEvents([]);
     setCheckins([]);
+    setTodos([]);
     setLastActivityAt(null);
+    setPendingTodoId(null);
     plannedEndNotifiedRef.current.clear();
     inactivityNotifiedRef.current = null;
     setDeleteOpen(false);
@@ -252,6 +302,7 @@ export default function Page() {
       status: "completed",
       createdAt: nowIso,
       updatedAt: nowIso,
+      todoId: null,
     };
     persist(upsertLog(logs, entry));
     setPastOpen(false);
@@ -275,6 +326,7 @@ export default function Page() {
       timestamp: input.timestamp.toISOString(),
       createdAt: nowIso,
       updatedAt: nowIso,
+      todoId: null,
     };
     persistEvents(upsertEvent(events, entry));
     setEventOpen(false);
@@ -306,6 +358,87 @@ export default function Page() {
     setCheckinOpen(true);
   };
 
+  const handleQuickPickTodo = (todo: TodoItem) => {
+    setTask(todo.title);
+    setPendingTodoId(todo.id);
+    setTodoQuickPickOpen(false);
+  };
+
+  const handleTodoSubmit = (input: {
+    title: string;
+    memo: string;
+    progress: number;
+  }) => {
+    const nowIso = new Date().toISOString();
+    if (!todoForm) return;
+    if (todoForm.mode === "add") {
+      const entry: TodoItem = {
+        id: generateId(),
+        title: input.title,
+        memo: input.memo,
+        progress: input.progress,
+        status: "open",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        doneAt: null,
+      };
+      persistTodos(addTodo(todos, entry));
+    } else {
+      const updated: TodoItem = {
+        ...todoForm.todo,
+        title: input.title,
+        memo: input.memo,
+        progress: input.progress,
+        updatedAt: nowIso,
+      };
+      persistTodos(updateTodo(todos, updated));
+    }
+    setTodoForm(null);
+  };
+
+  const handleTodoComplete = () => {
+    if (!todoForm || todoForm.mode !== "edit") return;
+    persistTodos(completeTodo(todos, todoForm.todo.id));
+    setTodoForm(null);
+  };
+
+  const handleTodoDelete = () => {
+    if (!todoForm || todoForm.mode !== "edit") return;
+    if (pendingTodoId === todoForm.todo.id) {
+      setPendingTodoId(null);
+    }
+    persistTodos(deleteTodo(todos, todoForm.todo.id));
+    setTodoForm(null);
+  };
+
+  const handleDeleteDoneTodo = (id: string) => {
+    persistTodos(deleteTodo(todos, id));
+  };
+
+  const handleFollowupComplete = () => {
+    if (!todoFollowup) return;
+    persistTodos(completeTodo(todos, todoFollowup.id));
+    setTodoFollowup(null);
+  };
+
+  const handleFollowupContinue = (input: { progress: number; memo: string }) => {
+    if (!todoFollowup) return;
+    const current = getTodoById(todos, todoFollowup.id);
+    if (!current) {
+      setTodoFollowup(null);
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    const updated: TodoItem = {
+      ...current,
+      progress: input.progress,
+      memo: input.memo,
+      updatedAt: nowIso,
+    };
+    persistTodos(updateTodo(todos, updated));
+    setTodoFollowup(null);
+  };
+
   const elapsedMs = activeLog
     ? now - new Date(activeLog.startAt).getTime()
     : 0;
@@ -314,9 +447,23 @@ export default function Page() {
       ? new Date(activeLog.plannedEndAt).getTime() - now
       : null;
 
+  const linkedTodoTitle = activeLog?.todoId
+    ? getTodoById(todos, activeLog.todoId)?.title ?? null
+    : null;
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-end px-4 py-3">
+      <header className="flex items-center justify-end gap-2 px-4 py-3">
+        {mounted && !activeLog && (
+          <button
+            type="button"
+            onClick={() => setTodoQuickPickOpen(true)}
+            aria-label="やるべきこと"
+            className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
+          >
+            <TodoIcon className="h-5 w-5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
@@ -335,6 +482,21 @@ export default function Page() {
               <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
                 what are you doing now?
               </h1>
+              {pendingTodo && (
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-sky-900/40 px-3 py-2 text-sm">
+                  <span className="break-words">
+                    <span className="text-sky-300">やるべきこと:</span>{" "}
+                    {pendingTodo.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingTodoId(null)}
+                    className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+                  >
+                    解除
+                  </button>
+                </div>
+              )}
               <textarea
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
@@ -362,6 +524,11 @@ export default function Page() {
               <p className="whitespace-pre-wrap break-words text-2xl font-semibold leading-relaxed">
                 {activeLog.task}
               </p>
+              {linkedTodoTitle && (
+                <p className="mt-2 text-xs text-sky-300">
+                  やるべきこと: {linkedTodoTitle}
+                </p>
+              )}
             </div>
 
             <dl className="space-y-3 rounded-2xl bg-slate-800 p-5 text-base">
@@ -433,13 +600,18 @@ export default function Page() {
         !pastOpen &&
         !eventOpen &&
         !eventListOpen &&
-        !editOpen && (
+        !editOpen &&
+        !todoManageOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onExport={() => setExportOpen(true)}
             onAddPast={() => setPastOpen(true)}
             onAddEvent={() => setEventOpen(true)}
             onListEvents={() => setEventListOpen(true)}
+            onManageTodos={() => {
+              setTodoManageOpen(true);
+              setMenuOpen(false);
+            }}
             onDelete={() => setDeleteOpen(true)}
           />
         )}
@@ -481,6 +653,41 @@ export default function Page() {
           onConfirm={handleEditActive}
         />
       )}
+      {todoManageOpen && !todoForm && (
+        <TodoManageModal
+          todos={todos}
+          onClose={() => setTodoManageOpen(false)}
+          onAdd={() => setTodoForm({ mode: "add" })}
+          onEdit={(todo) => setTodoForm({ mode: "edit", todo })}
+          onDeleteDone={handleDeleteDoneTodo}
+        />
+      )}
+      {todoQuickPickOpen && (
+        <TodoQuickPickModal
+          todos={todos}
+          onClose={() => setTodoQuickPickOpen(false)}
+          onPick={handleQuickPickTodo}
+        />
+      )}
+      {todoForm && (
+        <TodoFormModal
+          initial={todoForm.mode === "edit" ? todoForm.todo : null}
+          onClose={() => setTodoForm(null)}
+          onSubmit={handleTodoSubmit}
+          onComplete={
+            todoForm.mode === "edit" ? handleTodoComplete : undefined
+          }
+          onDelete={todoForm.mode === "edit" ? handleTodoDelete : undefined}
+        />
+      )}
+      {todoFollowup && (
+        <TodoFollowupModal
+          todo={todoFollowup}
+          onClose={() => setTodoFollowup(null)}
+          onComplete={handleFollowupComplete}
+          onContinue={handleFollowupContinue}
+        />
+      )}
       {deleteOpen && (
         <DeleteConfirmModal
           onClose={() => setDeleteOpen(false)}
@@ -511,5 +718,24 @@ function Row({
         {value}
       </dd>
     </div>
+  );
+}
+
+function TodoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="m8 11 2 2 4-4" />
+      <path d="M8 17h8" />
+    </svg>
   );
 }
