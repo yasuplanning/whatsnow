@@ -5,6 +5,7 @@ import Modal from "./Modal";
 interface Props {
   onClose: () => void;
   onExport: () => void;
+  onTimeline: () => void;
   onAddPast: () => void;
   onAddEvent: () => void;
   onListEvents: () => void;
@@ -17,6 +18,7 @@ interface Props {
 export default function MenuModal({
   onClose,
   onExport,
+  onTimeline,
   onAddPast,
   onAddEvent,
   onListEvents,
@@ -69,6 +71,13 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           カウントダウンタイマー
+        </button>
+        <button
+          type="button"
+          onClick={onTimeline}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          できごと一覧
         </button>
         <button
           type="button"

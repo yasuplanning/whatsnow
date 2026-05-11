@@ -1,3 +1,5 @@
+import type { Category } from "./category";
+
 export type EntryType = "task" | "event" | "checkin";
 
 export type LogStatus = "active" | "completed";
@@ -6,9 +8,11 @@ export interface LogEntry {
   id: string;
   type: "task";
   task: string;
+  category: Category;
   startAt: string;
   plannedEndAt: string | null;
   endAt: string | null;
+  durationMinutes: number | null;
   memo: string;
   status: LogStatus;
   createdAt: string;
@@ -20,8 +24,11 @@ export interface EventEntry {
   id: string;
   type: "event";
   content: string;
+  category: Category;
   timestamp: string;
-  photo: string | null;
+  photoId: string | null;
+  photoPath: string | null;
+  photoSummary: string | null;
   memo: string;
   createdAt: string;
   updatedAt: string;
@@ -32,25 +39,10 @@ export interface CheckinEntry {
   id: string;
   type: "checkin";
   text: string;
+  category: Category;
   checkedAt: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export type TodoStatus = "open" | "done";
-
-export interface TodoItem {
-  id: string;
-  title: string;
-  memo: string;
-  progress: number;
-  status: TodoStatus;
-  deadline: string | null;
-  createdAt: string;
-  updatedAt: string;
-  doneAt: string | null;
-  recurringTodoId?: string | null;
-  recurringPeriodKey?: string | null;
 }
 
 export type CountdownTimerStatus = "active" | "done" | "cancelled";
@@ -58,6 +50,7 @@ export type CountdownTimerStatus = "active" | "done" | "cancelled";
 export interface CountdownTimer {
   id: string;
   title: string;
+  category: Category;
   memo: string;
   durationMinutes: number;
   startedAt: string;
@@ -83,4 +76,20 @@ export interface RecurringTodo {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TodoStatus = "open" | "done";
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  memo: string;
+  progress: number;
+  status: TodoStatus;
+  deadline: string | null;
+  createdAt: string;
+  updatedAt: string;
+  doneAt: string | null;
+  recurringTodoId?: string | null;
+  recurringPeriodKey?: string | null;
 }

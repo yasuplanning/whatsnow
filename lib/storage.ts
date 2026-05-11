@@ -6,6 +6,8 @@ import type {
   RecurringTodo,
   TodoItem,
 } from "./types";
+import { inferCategoryFromTitleAndMemo, normalizeCategory } from "./category";
+import { diffMinutes, migrateIsoToJst } from "./time";
 
 const STORAGE_KEY = "whatsnow.logs.v1";
 const EVENT_STORAGE_KEY = "whatsnow.events.v1";
@@ -14,35 +16,313 @@ const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
 const TODO_STORAGE_KEY = "whatsnow.todos.v1";
 const RECURRING_TODO_STORAGE_KEY = "whatsnow.recurringTodos.v1";
 const COUNTDOWN_STORAGE_KEY = "whatsnow.countdowns.v1";
+const PHOTO_STORAGE_KEY = "whatsnow.photos.v1";
+const BACKUP_KEY = "whatsnow.backup.preMigration.v1";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
-export function loadLogs(): LogEntry[] {
+let backupAttempted = false;
+function ensureBackup(): void {
+  if (backupAttempted) return;
+  backupAttempted = true;
+  if (!isBrowser()) return;
+  try {
+    if (window.localStorage.getItem(BACKUP_KEY)) return;
+    const snapshot = {
+      at: new Date().toISOString(),
+      logs: window.localStorage.getItem(STORAGE_KEY),
+      events: window.localStorage.getItem(EVENT_STORAGE_KEY),
+      checkins: window.localStorage.getItem(CHECKIN_STORAGE_KEY),
+      countdowns: window.localStorage.getItem(COUNTDOWN_STORAGE_KEY),
+      todos: window.localStorage.getItem(TODO_STORAGE_KEY),
+      recurring: window.localStorage.getItem(RECURRING_TODO_STORAGE_KEY),
+    };
+    const anyPresent =
+      snapshot.logs ||
+      snapshot.events ||
+      snapshot.checkins ||
+      snapshot.countdowns ||
+      snapshot.todos ||
+      snapshot.recurring;
+    if (!anyPresent) return;
+    window.localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshot));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function readArray<T>(key: string): T[] {
   if (!isBrowser()) return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      ...item,
-      type: "task" as const,
-      todoId: item?.todoId ?? null,
-    })) as LogEntry[];
+    return parsed as T[];
   } catch {
     return [];
   }
 }
 
-export function saveLogs(logs: LogEntry[]): void {
+function writeArray<T>(key: string, items: T[]): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+    window.localStorage.setItem(key, JSON.stringify(items));
   } catch {
-    // ignore quota errors
+    // ignore
   }
+}
+
+function loadAndMigrate<T>(
+  key: string,
+  migrate: (item: any) => T
+): T[] {
+  if (!isBrowser()) return [];
+  ensureBackup();
+  const raw = readArray<any>(key);
+  if (raw.length === 0) return [];
+  const migrated = raw.map(migrate);
+  const before = JSON.stringify(raw);
+  const after = JSON.stringify(migrated);
+  if (before !== after) {
+    writeArray(key, migrated);
+  }
+  return migrated;
+}
+
+function readPhotoMap(): Record<string, string> {
+  if (!isBrowser()) return {};
+  try {
+    const raw = window.localStorage.getItem(PHOTO_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function writePhotoMap(map: Record<string, string>): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(PHOTO_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function savePhoto(dataUrl: string): { photoId: string; photoPath: string } {
+  const photoId = generateId();
+  const map = readPhotoMap();
+  map[photoId] = dataUrl;
+  writePhotoMap(map);
+  return { photoId, photoPath: `local://photos/${photoId}` };
+}
+
+export function getPhotoDataUrl(photoId: string | null | undefined): string | null {
+  if (!photoId) return null;
+  const map = readPhotoMap();
+  return map[photoId] ?? null;
+}
+
+export function removePhoto(photoId: string | null | undefined): void {
+  if (!photoId) return;
+  const map = readPhotoMap();
+  if (photoId in map) {
+    delete map[photoId];
+    writePhotoMap(map);
+  }
+}
+
+function migrateLogEntry(raw: any): LogEntry {
+  const startAt = migrateIsoToJst(raw?.startAt) ?? "";
+  const plannedEndAt = migrateIsoToJst(raw?.plannedEndAt);
+  const endAt = migrateIsoToJst(raw?.endAt);
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? startAt;
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const task = typeof raw?.task === "string" ? raw.task : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const status = raw?.status === "completed" ? "completed" : "active";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(task, memo);
+  const existingDuration =
+    typeof raw?.durationMinutes === "number" ? raw.durationMinutes : null;
+  const durationMinutes =
+    existingDuration !== null ? existingDuration : diffMinutes(startAt, endAt);
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    type: "task",
+    task,
+    category,
+    startAt,
+    plannedEndAt,
+    endAt,
+    durationMinutes,
+    memo,
+    status,
+    createdAt,
+    updatedAt,
+    todoId: raw?.todoId ?? null,
+  };
+}
+
+function migrateEventEntry(raw: any): EventEntry {
+  const timestamp = migrateIsoToJst(raw?.timestamp) ?? "";
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? timestamp;
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const content = typeof raw?.content === "string" ? raw.content : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(content, memo);
+
+  let photoId: string | null =
+    typeof raw?.photoId === "string" ? raw.photoId : null;
+  let photoPath: string | null =
+    typeof raw?.photoPath === "string" ? raw.photoPath : null;
+  const photoSummary: string | null =
+    typeof raw?.photoSummary === "string" ? raw.photoSummary : null;
+
+  const legacyPhoto = raw?.photo;
+  if (
+    !photoId &&
+    typeof legacyPhoto === "string" &&
+    legacyPhoto.startsWith("data:")
+  ) {
+    const saved = savePhoto(legacyPhoto);
+    photoId = saved.photoId;
+    photoPath = saved.photoPath;
+  }
+  if (photoId && !photoPath) {
+    photoPath = `local://photos/${photoId}`;
+  }
+
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    type: "event",
+    content,
+    category,
+    timestamp,
+    photoId,
+    photoPath,
+    photoSummary,
+    memo,
+    createdAt,
+    updatedAt,
+    todoId: raw?.todoId ?? null,
+  };
+}
+
+function migrateCheckinEntry(raw: any): CheckinEntry {
+  const checkedAt = migrateIsoToJst(raw?.checkedAt) ?? "";
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? checkedAt;
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const text = typeof raw?.text === "string" ? raw.text : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(text, "");
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    type: "checkin",
+    text,
+    category,
+    checkedAt,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function migrateCountdownTimer(raw: any): CountdownTimer {
+  const startedAt = migrateIsoToJst(raw?.startedAt) ?? "";
+  const dueAt = migrateIsoToJst(raw?.dueAt) ?? "";
+  const completedAt = migrateIsoToJst(raw?.completedAt);
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? startedAt;
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const title = typeof raw?.title === "string" ? raw.title : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(title, memo);
+  const durationMinutes =
+    typeof raw?.durationMinutes === "number" ? raw.durationMinutes : 0;
+  const status =
+    raw?.status === "done" || raw?.status === "cancelled" ? raw.status : "active";
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    title,
+    category,
+    memo,
+    durationMinutes,
+    startedAt,
+    dueAt,
+    completedAt,
+    status,
+    isMinimized: !!raw?.isMinimized,
+    notified: !!raw?.notified,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function migrateTodoItem(raw: any): TodoItem {
+  const deadline = migrateIsoToJst(raw?.deadline);
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? "";
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const doneAt = migrateIsoToJst(raw?.doneAt);
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    title: typeof raw?.title === "string" ? raw.title : "",
+    memo: typeof raw?.memo === "string" ? raw.memo : "",
+    progress: typeof raw?.progress === "number" ? raw.progress : 0,
+    status: raw?.status === "done" ? "done" : "open",
+    deadline,
+    createdAt,
+    updatedAt,
+    doneAt,
+    recurringTodoId: raw?.recurringTodoId ?? null,
+    recurringPeriodKey: raw?.recurringPeriodKey ?? null,
+  };
+}
+
+function migrateRecurring(raw: any): RecurringTodo {
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? "";
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    title: typeof raw?.title === "string" ? raw.title : "",
+    memo: typeof raw?.memo === "string" ? raw.memo : "",
+    frequency: raw?.frequency === "yearly" ? "yearly" : "monthly",
+    dayOfMonth: typeof raw?.dayOfMonth === "number" ? raw.dayOfMonth : 1,
+    monthOfYear: typeof raw?.monthOfYear === "number" ? raw.monthOfYear : null,
+    deadlineDays:
+      typeof raw?.deadlineDays === "number" ? raw.deadlineDays : 0,
+    enabled: raw?.enabled !== false,
+    createdAt,
+    updatedAt,
+  };
+}
+
+export function loadLogs(): LogEntry[] {
+  return loadAndMigrate<LogEntry>(STORAGE_KEY, migrateLogEntry);
+}
+
+export function saveLogs(logs: LogEntry[]): void {
+  writeArray(STORAGE_KEY, logs);
 }
 
 export function findActiveLog(logs: LogEntry[]): LogEntry | null {
@@ -66,37 +346,12 @@ export function clearAllLogs(): void {
   }
 }
 
-export function generateId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export function loadEvents(): EventEntry[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(EVENT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      ...item,
-      type: "event" as const,
-      todoId: item?.todoId ?? null,
-    })) as EventEntry[];
-  } catch {
-    return [];
-  }
+  return loadAndMigrate<EventEntry>(EVENT_STORAGE_KEY, migrateEventEntry);
 }
 
 export function saveEvents(events: EventEntry[]): void {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(events));
-  } catch {
-    // ignore quota errors
-  }
+  writeArray(EVENT_STORAGE_KEY, events);
 }
 
 export function upsertEvent(events: EventEntry[], entry: EventEntry): EventEntry[] {
@@ -108,6 +363,8 @@ export function upsertEvent(events: EventEntry[], entry: EventEntry): EventEntry
 }
 
 export function removeEvent(events: EventEntry[], id: string): EventEntry[] {
+  const target = events.find((e) => e.id === id);
+  if (target?.photoId) removePhoto(target.photoId);
   return events.filter((e) => e.id !== id);
 }
 
@@ -121,28 +378,17 @@ export function clearAllEvents(): void {
 }
 
 export function loadCheckins(): CheckinEntry[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(CHECKIN_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({ ...item, type: "checkin" as const })) as CheckinEntry[];
-  } catch {
-    return [];
-  }
+  return loadAndMigrate<CheckinEntry>(CHECKIN_STORAGE_KEY, migrateCheckinEntry);
 }
 
 export function saveCheckins(checkins: CheckinEntry[]): void {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(checkins));
-  } catch {
-    // ignore quota errors
-  }
+  writeArray(CHECKIN_STORAGE_KEY, checkins);
 }
 
-export function upsertCheckin(checkins: CheckinEntry[], entry: CheckinEntry): CheckinEntry[] {
+export function upsertCheckin(
+  checkins: CheckinEntry[],
+  entry: CheckinEntry
+): CheckinEntry[] {
   const idx = checkins.findIndex((c) => c.id === entry.id);
   if (idx === -1) return [...checkins, entry];
   const next = checkins.slice();
@@ -150,7 +396,10 @@ export function upsertCheckin(checkins: CheckinEntry[], entry: CheckinEntry): Ch
   return next;
 }
 
-export function removeCheckin(checkins: CheckinEntry[], id: string): CheckinEntry[] {
+export function removeCheckin(
+  checkins: CheckinEntry[],
+  id: string
+): CheckinEntry[] {
   return checkins.filter((c) => c.id !== id);
 }
 
@@ -191,30 +440,11 @@ export function clearLastActivityAt(): void {
 }
 
 export function getTodos(): TodoItem[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(TODO_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      ...item,
-      deadline: item?.deadline ?? null,
-      recurringTodoId: item?.recurringTodoId ?? null,
-      recurringPeriodKey: item?.recurringPeriodKey ?? null,
-    })) as TodoItem[];
-  } catch {
-    return [];
-  }
+  return loadAndMigrate<TodoItem>(TODO_STORAGE_KEY, migrateTodoItem);
 }
 
 export function saveTodos(todos: TodoItem[]): void {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(TODO_STORAGE_KEY, JSON.stringify(todos));
-  } catch {
-    // ignore
-  }
+  writeArray(TODO_STORAGE_KEY, todos);
 }
 
 export function addTodo(todos: TodoItem[], item: TodoItem): TodoItem[] {
@@ -279,29 +509,21 @@ export function moveTodoDown(todos: TodoItem[], id: string): TodoItem[] {
   return swapTodosByIds(todos, id, openIds[idx + 1]);
 }
 
-export function getRecurringTodos(): RecurringTodo[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(RECURRING_TODO_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as RecurringTodo[];
-  } catch {
-    return [];
-  }
-}
-
-export function saveRecurringTodos(items: RecurringTodo[]): void {
+export function clearAllTodos(): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(
-      RECURRING_TODO_STORAGE_KEY,
-      JSON.stringify(items)
-    );
+    window.localStorage.removeItem(TODO_STORAGE_KEY);
   } catch {
     // ignore
   }
+}
+
+export function getRecurringTodos(): RecurringTodo[] {
+  return loadAndMigrate<RecurringTodo>(RECURRING_TODO_STORAGE_KEY, migrateRecurring);
+}
+
+export function saveRecurringTodos(items: RecurringTodo[]): void {
+  writeArray(RECURRING_TODO_STORAGE_KEY, items);
 }
 
 export function addRecurringTodo(
@@ -346,25 +568,14 @@ export function clearAllRecurringTodos(): void {
 }
 
 export function getCountdownTimers(): CountdownTimer[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(COUNTDOWN_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as CountdownTimer[];
-  } catch {
-    return [];
-  }
+  return loadAndMigrate<CountdownTimer>(
+    COUNTDOWN_STORAGE_KEY,
+    migrateCountdownTimer
+  );
 }
 
 export function saveCountdownTimers(items: CountdownTimer[]): void {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(COUNTDOWN_STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // ignore
-  }
+  writeArray(COUNTDOWN_STORAGE_KEY, items);
 }
 
 export function addCountdownTimer(
@@ -434,10 +645,10 @@ export function clearAllCountdownTimers(): void {
   }
 }
 
-export function clearAllTodos(): void {
+export function clearAllPhotos(): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.removeItem(TODO_STORAGE_KEY);
+    window.localStorage.removeItem(PHOTO_STORAGE_KEY);
   } catch {
     // ignore
   }

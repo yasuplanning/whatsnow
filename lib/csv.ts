@@ -5,19 +5,25 @@ import type {
   LogEntry,
   TodoItem,
 } from "./types";
+import {
+  checkinToUnified,
+  countdownToUnified,
+  eventToUnified,
+  taskToUnified,
+  todoDoneToUnified,
+  type UnifiedLog,
+} from "./unified";
 
 const HEADER = [
   "type",
-  "内容",
-  "開始時刻",
-  "終了時刻",
-  "終了予定時刻",
-  "イベント時刻",
-  "チェックイン時刻",
-  "メモ",
-  "写真",
-  "todoTitle",
-  "ステータス",
+  "title",
+  "category",
+  "startAt",
+  "endAt",
+  "durationMinutes",
+  "memo",
+  "status",
+  "photoPath",
 ];
 
 function pad(n: number): string {
@@ -35,15 +41,6 @@ function dateKeyOf(iso: string | null): string | null {
   return formatLocalDateKey(d);
 }
 
-export function formatLocalDateTime(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-    d.getDate()
-  )} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function escapeCsvField(value: string): string {
   const needsQuote = /[",\r\n]/.test(value);
   const escaped = value.replace(/"/g, '""');
@@ -55,6 +52,7 @@ interface FilteredEntries {
   events: EventEntry[];
   checkins: CheckinEntry[];
   countdowns: CountdownTimer[];
+  todoDones: TodoItem[];
 }
 
 export function entriesForDate(
@@ -62,107 +60,28 @@ export function entriesForDate(
   events: EventEntry[],
   checkins: CheckinEntry[],
   countdowns: CountdownTimer[],
+  todos: TodoItem[],
   dateKey: string
 ): FilteredEntries {
   return {
     tasks: tasks.filter((t) => dateKeyOf(t.startAt) === dateKey),
     events: events.filter((e) => dateKeyOf(e.timestamp) === dateKey),
     checkins: checkins.filter((c) => dateKeyOf(c.checkedAt) === dateKey),
-    countdowns: countdowns.filter(
-      (c) => dateKeyOf(c.startedAt) === dateKey
+    countdowns: countdowns.filter((c) => dateKeyOf(c.startedAt) === dateKey),
+    todoDones: todos.filter(
+      (t) => t.status === "done" && dateKeyOf(t.doneAt) === dateKey
     ),
   };
 }
 
-interface CsvRow {
-  type: string;
-  content: string;
-  startAt: string;
-  endAt: string;
-  plannedEndAt: string;
-  timestamp: string;
-  checkedAt: string;
-  memo: string;
-  photo: string;
-  todoTitle: string;
-  status: string;
-  sortKey: string;
+function chooseStartAt(u: UnifiedLog): string {
+  return (
+    u.startAt ?? u.eventAt ?? u.checkinAt ?? u.endAt ?? u.updatedAt ?? ""
+  );
 }
 
-function resolveTodoTitle(
-  todoMap: Map<string, TodoItem>,
-  todoId: string | null | undefined
-): string {
-  if (!todoId) return "";
-  return todoMap.get(todoId)?.title ?? "";
-}
-
-function taskRow(t: LogEntry, todoMap: Map<string, TodoItem>): CsvRow {
-  return {
-    type: "task",
-    content: t.task,
-    startAt: formatLocalDateTime(t.startAt),
-    endAt: formatLocalDateTime(t.endAt),
-    plannedEndAt: formatLocalDateTime(t.plannedEndAt),
-    timestamp: "",
-    checkedAt: "",
-    memo: t.memo,
-    photo: "",
-    todoTitle: resolveTodoTitle(todoMap, t.todoId ?? null),
-    status: t.status,
-    sortKey: t.startAt ?? "",
-  };
-}
-
-function eventRow(e: EventEntry, todoMap: Map<string, TodoItem>): CsvRow {
-  return {
-    type: "event",
-    content: e.content,
-    startAt: "",
-    endAt: "",
-    plannedEndAt: "",
-    timestamp: formatLocalDateTime(e.timestamp),
-    checkedAt: "",
-    memo: e.memo,
-    photo: e.photo ?? "",
-    todoTitle: resolveTodoTitle(todoMap, e.todoId ?? null),
-    status: "",
-    sortKey: e.timestamp ?? "",
-  };
-}
-
-function checkinRow(c: CheckinEntry): CsvRow {
-  return {
-    type: "checkin",
-    content: c.text,
-    startAt: "",
-    endAt: "",
-    plannedEndAt: "",
-    timestamp: "",
-    checkedAt: formatLocalDateTime(c.checkedAt),
-    memo: "",
-    photo: "",
-    todoTitle: "",
-    status: "",
-    sortKey: c.checkedAt ?? "",
-  };
-}
-
-function countdownRow(c: CountdownTimer): CsvRow {
-  return {
-    type: "countdown",
-    content: c.title,
-    startAt: formatLocalDateTime(c.startedAt),
-    endAt: formatLocalDateTime(c.completedAt),
-    plannedEndAt: formatLocalDateTime(c.dueAt),
-    timestamp: "",
-    checkedAt: "",
-    memo: c.memo,
-    photo: "",
-    todoTitle: "",
-    status: c.status,
-    sortKey: c.startedAt ?? "",
-  };
+function chooseEndAt(u: UnifiedLog): string {
+  return u.endAt ?? "";
 }
 
 export function buildCsv(
@@ -170,18 +89,16 @@ export function buildCsv(
   events: EventEntry[],
   checkins: CheckinEntry[],
   countdowns: CountdownTimer[],
-  todos: TodoItem[]
+  todoDones: TodoItem[]
 ): string {
-  const todoMap = new Map<string, TodoItem>();
-  for (const t of todos) todoMap.set(t.id, t);
-
-  const rows: CsvRow[] = [
-    ...tasks.map((t) => taskRow(t, todoMap)),
-    ...events.map((e) => eventRow(e, todoMap)),
-    ...checkins.map(checkinRow),
-    ...countdowns.map(countdownRow),
+  const rows: UnifiedLog[] = [
+    ...tasks.map(taskToUnified),
+    ...events.map(eventToUnified),
+    ...checkins.map(checkinToUnified),
+    ...countdowns.map(countdownToUnified),
+    ...todoDones.map(todoDoneToUnified),
   ];
-  rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  rows.sort((a, b) => chooseStartAt(a).localeCompare(chooseStartAt(b)));
 
   const lines: string[] = [];
   lines.push(HEADER.map(escapeCsvField).join(","));
@@ -189,16 +106,14 @@ export function buildCsv(
     lines.push(
       [
         r.type,
-        r.content,
-        r.startAt,
-        r.endAt,
-        r.plannedEndAt,
-        r.timestamp,
-        r.checkedAt,
+        r.title,
+        r.category ?? "",
+        chooseStartAt(r),
+        chooseEndAt(r),
+        r.durationMinutes != null ? String(r.durationMinutes) : "",
         r.memo,
-        r.photo,
-        r.todoTitle,
         r.status,
+        r.photoPath ?? "",
       ]
         .map(escapeCsvField)
         .join(",")
@@ -207,22 +122,59 @@ export function buildCsv(
   return lines.join("\r\n");
 }
 
+export function buildUnifiedLogs(
+  tasks: LogEntry[],
+  events: EventEntry[],
+  checkins: CheckinEntry[],
+  countdowns: CountdownTimer[],
+  todoDones: TodoItem[]
+): UnifiedLog[] {
+  const rows: UnifiedLog[] = [
+    ...tasks.map(taskToUnified),
+    ...events.map(eventToUnified),
+    ...checkins.map(checkinToUnified),
+    ...countdowns.map(countdownToUnified),
+    ...todoDones.map(todoDoneToUnified),
+  ];
+  rows.sort((a, b) => chooseStartAt(a).localeCompare(chooseStartAt(b)));
+  return rows;
+}
+
 export function downloadCsv(
   dateKey: string,
   tasks: LogEntry[],
   events: EventEntry[],
   checkins: CheckinEntry[],
   countdowns: CountdownTimer[],
-  todos: TodoItem[]
+  todoDones: TodoItem[]
 ): void {
   if (typeof window === "undefined") return;
-  const csv = buildCsv(tasks, events, checkins, countdowns, todos);
+  const csv = buildCsv(tasks, events, checkins, countdowns, todoDones);
   const bom = "﻿";
   const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8" });
+  triggerDownload(blob, `lifelog-${dateKey}.csv`);
+}
+
+export function downloadJson(
+  dateKey: string,
+  tasks: LogEntry[],
+  events: EventEntry[],
+  checkins: CheckinEntry[],
+  countdowns: CountdownTimer[],
+  todoDones: TodoItem[]
+): void {
+  if (typeof window === "undefined") return;
+  const logs = buildUnifiedLogs(tasks, events, checkins, countdowns, todoDones);
+  const json = JSON.stringify({ date: dateKey, logs }, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  triggerDownload(blob, `lifelog-${dateKey}.json`);
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `lifelog-${dateKey}.csv`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

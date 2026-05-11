@@ -38,6 +38,7 @@ import {
   moveTodoDown,
   moveTodoUp,
   removeEvent,
+  savePhoto,
   saveCheckins,
   saveCountdownTimers,
   saveEvents,
@@ -52,12 +53,25 @@ import {
   upsertLog,
 } from "@/lib/storage";
 import { generateRecurringTodosForNow } from "@/lib/recurring";
-import { downloadCsv, entriesForDate } from "@/lib/csv";
+import { downloadCsv, downloadJson, entriesForDate } from "@/lib/csv";
 import {
   ensureNotificationPermission,
   showNotification,
 } from "@/lib/notification";
-import { formatClock, formatDuration } from "@/lib/time";
+import {
+  diffMinutes,
+  formatClock,
+  formatDuration,
+  nowJstIso,
+  toJstIso,
+} from "@/lib/time";
+import {
+  CATEGORY_COLOR,
+  inferCategoryFromTitleAndMemo,
+  type Category,
+} from "@/lib/category";
+import CategorySelect from "@/components/CategorySelect";
+import EventTimelineModal from "@/components/EventTimelineModal";
 import EndModal from "@/components/EndModal";
 import MenuModal from "@/components/MenuModal";
 import ExportModal from "@/components/ExportModal";
@@ -100,6 +114,8 @@ export default function Page() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
   const [task, setTask] = useState<string>("");
+  const [taskCategory, setTaskCategory] = useState<Category>("その他");
+  const [taskCategoryDirty, setTaskCategoryDirty] = useState(false);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,6 +137,7 @@ export default function Page() {
   );
   const [timers, setTimers] = useState<CountdownTimer[]>([]);
   const [countdownFormOpen, setCountdownFormOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
@@ -202,7 +219,7 @@ export default function Page() {
         now >= new Date(t.dueAt).getTime()
     );
     if (toNotify.length === 0) return;
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     const updated = timers.map((t) =>
       toNotify.some((n) => n.id === t.id)
         ? { ...t, notified: true, updatedAt: nowIso }
@@ -260,21 +277,30 @@ export default function Page() {
   }, []);
 
   const markActivity = useCallback(() => {
-    const iso = new Date().toISOString();
+    const iso = nowJstIso();
     setLastActivityAt(iso);
     saveLastActivityAt(iso);
   }, []);
+
+  const handleTaskChange = (next: string) => {
+    setTask(next);
+    if (!taskCategoryDirty) {
+      setTaskCategory(inferCategoryFromTitleAndMemo(next, ""));
+    }
+  };
 
   const handleRegisterClick = () => {
     const trimmed = task.trim();
     if (!trimmed) return;
     void ensureNotificationPermission();
     const startAt = new Date();
-    const nowIso = startAt.toISOString();
+    const nowIso = nowJstIso();
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
       task: trimmed,
+      category: taskCategory,
+      durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
       endAt: null,
@@ -286,6 +312,8 @@ export default function Page() {
     };
     persist(upsertLog(logs, entry));
     setTask("");
+    setTaskCategory("その他");
+    setTaskCategoryDirty(false);
     setPendingTodoId(null);
     setPhase({ kind: "active" });
     markActivity();
@@ -296,15 +324,22 @@ export default function Page() {
     startAt: Date;
     plannedEndAt: Date | null;
     memo: string;
+    category: Category;
   }) => {
     if (!activeLog) return;
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
+    const startAtIso = toJstIso(input.startAt);
+    const plannedEndAtIso = input.plannedEndAt
+      ? toJstIso(input.plannedEndAt)
+      : null;
     const updated: LogEntry = {
       ...activeLog,
       task: input.task,
-      startAt: input.startAt.toISOString(),
-      plannedEndAt: input.plannedEndAt ? input.plannedEndAt.toISOString() : null,
+      startAt: startAtIso,
+      plannedEndAt: plannedEndAtIso,
       memo: input.memo,
+      category: input.category,
+      durationMinutes: diffMinutes(startAtIso, activeLog.endAt),
       updatedAt: nowIso,
     };
     persist(upsertLog(logs, updated));
@@ -317,12 +352,14 @@ export default function Page() {
       setPhase({ kind: "initial" });
       return;
     }
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
+    const endAtIso = toJstIso(endAt);
     const updated: LogEntry = {
       ...activeLog,
-      endAt: endAt.toISOString(),
+      endAt: endAtIso,
       memo,
       status: "completed",
+      durationMinutes: diffMinutes(activeLog.startAt, endAtIso),
       updatedAt: nowIso,
     };
     persist(upsertLog(logs, updated));
@@ -339,14 +376,34 @@ export default function Page() {
     }
   };
 
-  const handleExport = (dateKey: string) => {
-    const {
-      tasks,
-      events: dayEvents,
-      checkins: dayCheckins,
-      countdowns: dayCountdowns,
-    } = entriesForDate(logs, events, checkins, timers, dateKey);
-    downloadCsv(dateKey, tasks, dayEvents, dayCheckins, dayCountdowns, todos);
+  const handleExport = (dateKey: string, format: "csv" | "json") => {
+    const filtered = entriesForDate(
+      logs,
+      events,
+      checkins,
+      timers,
+      todos,
+      dateKey
+    );
+    if (format === "csv") {
+      downloadCsv(
+        dateKey,
+        filtered.tasks,
+        filtered.events,
+        filtered.checkins,
+        filtered.countdowns,
+        filtered.todoDones
+      );
+    } else {
+      downloadJson(
+        dateKey,
+        filtered.tasks,
+        filtered.events,
+        filtered.checkins,
+        filtered.countdowns,
+        filtered.todoDones
+      );
+    }
     setExportOpen(false);
     setMenuOpen(false);
   };
@@ -379,15 +436,20 @@ export default function Page() {
     startAt: Date;
     endAt: Date;
     memo: string;
+    category: Category;
   }) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
+    const startAtIso = toJstIso(input.startAt);
+    const endAtIso = toJstIso(input.endAt);
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
       task: input.task,
-      startAt: input.startAt.toISOString(),
+      category: input.category,
+      durationMinutes: diffMinutes(startAtIso, endAtIso),
+      startAt: startAtIso,
       plannedEndAt: null,
-      endAt: input.endAt.toISOString(),
+      endAt: endAtIso,
       memo: input.memo,
       status: "completed",
       createdAt: nowIso,
@@ -402,18 +464,30 @@ export default function Page() {
 
   const handleAddEvent = (input: {
     content: string;
-    photo: string | null;
+    photoDataUrl: string | null;
+    photoSummary: string | null;
     memo: string;
     timestamp: Date;
+    category: Category;
   }) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
+    let photoId: string | null = null;
+    let photoPath: string | null = null;
+    if (input.photoDataUrl) {
+      const saved = savePhoto(input.photoDataUrl);
+      photoId = saved.photoId;
+      photoPath = saved.photoPath;
+    }
     const entry: EventEntry = {
       id: generateId(),
       type: "event",
       content: input.content,
-      photo: input.photo,
+      category: input.category,
+      photoId,
+      photoPath,
+      photoSummary: input.photoSummary,
       memo: input.memo,
-      timestamp: input.timestamp.toISOString(),
+      timestamp: toJstIso(input.timestamp),
       createdAt: nowIso,
       updatedAt: nowIso,
       todoId: null,
@@ -429,11 +503,12 @@ export default function Page() {
   };
 
   const handleAddCheckin = (text: string) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     const entry: CheckinEntry = {
       id: generateId(),
       type: "checkin",
       text,
+      category: inferCategoryFromTitleAndMemo(text, ""),
       checkedAt: nowIso,
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -460,7 +535,7 @@ export default function Page() {
     progress: number;
     deadline: Date | null;
   }) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     if (!todoForm) return;
     if (todoForm.mode === "add") {
       const entry: TodoItem = {
@@ -469,7 +544,7 @@ export default function Page() {
         memo: input.memo,
         progress: input.progress,
         status: "open",
-        deadline: input.deadline ? input.deadline.toISOString() : null,
+        deadline: input.deadline ? toJstIso(input.deadline) : null,
         createdAt: nowIso,
         updatedAt: nowIso,
         doneAt: null,
@@ -481,7 +556,7 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         progress: input.progress,
-        deadline: input.deadline ? input.deadline.toISOString() : null,
+        deadline: input.deadline ? toJstIso(input.deadline) : null,
         updatedAt: nowIso,
       };
       persistTodos(updateTodo(todos, updated));
@@ -550,7 +625,7 @@ export default function Page() {
     enabled: boolean;
   }) => {
     if (!recurringForm) return;
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     let nextTemplates: RecurringTodo[];
     if (recurringForm.mode === "add") {
       const entry: RecurringTodo = {
@@ -607,14 +682,15 @@ export default function Page() {
     const dueAt = new Date(
       startedAt.getTime() + input.durationMinutes * 60 * 1000
     );
-    const nowIso = startedAt.toISOString();
+    const nowIso = toJstIso(startedAt);
     const entry: CountdownTimer = {
       id: generateId(),
       title: input.title,
+      category: inferCategoryFromTitleAndMemo(input.title, input.memo),
       memo: input.memo,
       durationMinutes: input.durationMinutes,
       startedAt: nowIso,
-      dueAt: dueAt.toISOString(),
+      dueAt: toJstIso(dueAt),
       completedAt: null,
       status: "active",
       isMinimized: false,
@@ -628,7 +704,7 @@ export default function Page() {
   };
 
   const handleTimerMinimize = (id: string) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     persistTimers(
       timers.map((t) =>
         t.id === id ? { ...t, isMinimized: true, updatedAt: nowIso } : t
@@ -637,7 +713,7 @@ export default function Page() {
   };
 
   const handleTimerExpand = (id: string) => {
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     persistTimers(
       timers.map((t) =>
         t.id === id ? { ...t, isMinimized: false, updatedAt: nowIso } : t
@@ -660,7 +736,7 @@ export default function Page() {
       setTodoFollowup(null);
       return;
     }
-    const nowIso = new Date().toISOString();
+    const nowIso = nowJstIso();
     const updated: TodoItem = {
       ...current,
       progress: input.progress,
@@ -728,10 +804,17 @@ export default function Page() {
               )}
               <textarea
                 value={task}
-                onChange={(e) => setTask(e.target.value)}
+                onChange={(e) => handleTaskChange(e.target.value)}
                 placeholder="例: 資料作成、皿洗い、移動など"
                 rows={6}
                 className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
+              />
+              <CategorySelect
+                value={taskCategory}
+                onChange={(c) => {
+                  setTaskCategoryDirty(true);
+                  setTaskCategory(c);
+                }}
               />
               <button
                 type="button"
@@ -752,6 +835,11 @@ export default function Page() {
             <div className="rounded-2xl bg-slate-800 p-5">
               <p className="whitespace-pre-wrap break-words text-2xl font-semibold leading-relaxed">
                 {activeLog.task}
+              </p>
+              <p
+                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs ${CATEGORY_COLOR[activeLog.category]}`}
+              >
+                {activeLog.category}
               </p>
               {linkedTodoTitle && (
                 <p className="mt-2 text-xs text-sky-300">
@@ -825,10 +913,15 @@ export default function Page() {
         !editOpen &&
         !todoManageOpen &&
         !recurringManageOpen &&
-        !countdownFormOpen && (
+        !countdownFormOpen &&
+        !timelineOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onExport={() => setExportOpen(true)}
+            onTimeline={() => {
+              setTimelineOpen(true);
+              setMenuOpen(false);
+            }}
             onAddPast={() => setPastOpen(true)}
             onAddEvent={() => setEventOpen(true)}
             onListEvents={() => setEventListOpen(true)}
@@ -967,6 +1060,16 @@ export default function Page() {
           activeCount={timers.filter((t) => t.status === "active").length}
           onClose={() => setCountdownFormOpen(false)}
           onSubmit={handleCountdownSubmit}
+        />
+      )}
+      {timelineOpen && (
+        <EventTimelineModal
+          tasks={logs}
+          events={events}
+          checkins={checkins}
+          countdowns={timers}
+          todos={todos}
+          onClose={() => setTimelineOpen(false)}
         />
       )}
     </main>

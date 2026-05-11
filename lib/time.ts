@@ -62,6 +62,36 @@ export function formatHM(iso: string | null): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+export function toJstIso(date: Date): string {
+  const shifted = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const yyyy = shifted.getUTCFullYear();
+  const mm = pad2(shifted.getUTCMonth() + 1);
+  const dd = pad2(shifted.getUTCDate());
+  const hh = pad2(shifted.getUTCHours());
+  const mi = pad2(shifted.getUTCMinutes());
+  const ss = pad2(shifted.getUTCSeconds());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+09:00`;
+}
+
+export function nowJstIso(): string {
+  return toJstIso(new Date());
+}
+
+export function migrateIsoToJst(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return toJstIso(d);
+}
+
+export function diffMinutes(startIso: string | null, endIso: string | null): number | null {
+  if (!startIso || !endIso) return null;
+  const a = new Date(startIso).getTime();
+  const b = new Date(endIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.max(0, Math.round((b - a) / 60000));
+}
+
 export function formatClock(iso: string | null): string {
   if (!iso) return "未定";
   const d = new Date(iso);

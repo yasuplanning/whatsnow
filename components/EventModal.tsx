@@ -2,16 +2,20 @@
 
 import { useRef, useState } from "react";
 import Modal from "./Modal";
+import CategorySelect from "./CategorySelect";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
 import { compressImageToDataUrl } from "@/lib/image";
+import { inferCategoryFromTitleAndMemo, type Category } from "@/lib/category";
 
 interface Props {
   onClose: () => void;
   onConfirm: (input: {
     content: string;
-    photo: string | null;
+    photoDataUrl: string | null;
+    photoSummary: string | null;
     memo: string;
     timestamp: Date;
+    category: Category;
   }) => void;
 }
 
@@ -19,10 +23,27 @@ export default function EventModal({ onClose, onConfirm }: Props) {
   const [content, setContent] = useState<string>("");
   const [timestamp, setTimestamp] = useState<string>(toDatetimeLocal(new Date()));
   const [memo, setMemo] = useState<string>("");
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoSummary, setPhotoSummary] = useState<string>("");
+  const [category, setCategory] = useState<Category>("その他");
+  const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleContentChange = (next: string) => {
+    setContent(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(next, memo));
+    }
+  };
+
+  const handleMemoChange = (next: string) => {
+    setMemo(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(content, next));
+    }
+  };
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -30,7 +51,7 @@ export default function EventModal({ onClose, onConfirm }: Props) {
     setBusy(true);
     try {
       const dataUrl = await compressImageToDataUrl(file);
-      setPhoto(dataUrl);
+      setPhotoDataUrl(dataUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "画像の読み込みに失敗しました";
       setError(msg);
@@ -50,7 +71,14 @@ export default function EventModal({ onClose, onConfirm }: Props) {
       setError("時刻を入力してください。");
       return;
     }
-    onConfirm({ content: trimmed, photo, memo, timestamp: date });
+    onConfirm({
+      content: trimmed,
+      photoDataUrl,
+      photoSummary: photoSummary.trim() || null,
+      memo,
+      timestamp: date,
+      category,
+    });
   };
 
   return (
@@ -60,12 +88,20 @@ export default function EventModal({ onClose, onConfirm }: Props) {
           <label className="block text-sm text-slate-300">内容</label>
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => handleContentChange(e.target.value)}
             rows={2}
             placeholder="例: 朝起きた、歯磨きした、昼食"
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
         </div>
+
+        <CategorySelect
+          value={category}
+          onChange={(c) => {
+            setCategoryDirty(true);
+            setCategory(c);
+          }}
+        />
 
         <div className="space-y-2">
           <label className="block text-sm text-slate-300">時刻</label>
@@ -97,25 +133,34 @@ export default function EventModal({ onClose, onConfirm }: Props) {
               disabled={busy}
               className="flex-1 rounded-xl bg-slate-700 py-3 text-base font-semibold text-white hover:bg-slate-600 disabled:opacity-60"
             >
-              {busy ? "読み込み中…" : photo ? "撮り直す" : "写真を撮影 / 選択"}
+              {busy ? "読み込み中…" : photoDataUrl ? "撮り直す" : "写真を撮影 / 選択"}
             </button>
-            {photo && (
+            {photoDataUrl && (
               <button
                 type="button"
-                onClick={() => setPhoto(null)}
+                onClick={() => setPhotoDataUrl(null)}
                 className="rounded-xl bg-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-600"
               >
                 削除
               </button>
             )}
           </div>
-          {photo && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={photo}
-              alt="プレビュー"
-              className="mt-2 max-h-48 w-full rounded-xl object-contain"
-            />
+          {photoDataUrl && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoDataUrl}
+                alt="プレビュー"
+                className="mt-2 max-h-48 w-full rounded-xl object-contain"
+              />
+              <input
+                type="text"
+                value={photoSummary}
+                onChange={(e) => setPhotoSummary(e.target.value)}
+                placeholder="写真の説明（例: 食事の写真）"
+                className="mt-2 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+              />
+            </>
           )}
         </div>
 
@@ -123,7 +168,7 @@ export default function EventModal({ onClose, onConfirm }: Props) {
           <label className="block text-sm text-slate-300">メモ（任意）</label>
           <textarea
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => handleMemoChange(e.target.value)}
             rows={3}
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />

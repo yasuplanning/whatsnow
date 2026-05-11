@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Modal from "./Modal";
+import CategorySelect from "./CategorySelect";
 import type { LogEntry } from "@/lib/types";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
+import type { Category } from "@/lib/category";
 
 interface Props {
   log: LogEntry;
@@ -13,6 +15,7 @@ interface Props {
     startAt: Date;
     plannedEndAt: Date | null;
     memo: string;
+    category: Category;
   }) => void;
 }
 
@@ -31,6 +34,7 @@ export default function EditActiveTaskModal({ log, onClose, onConfirm }: Props) 
       : toDatetimeLocal(fallbackPlanned)
   );
   const [memo, setMemo] = useState<string>(log.memo);
+  const [category, setCategory] = useState<Category>(log.category);
   const [error, setError] = useState<string>("");
 
   const handleSubmit = () => {
@@ -61,6 +65,7 @@ export default function EditActiveTaskModal({ log, onClose, onConfirm }: Props) 
       startAt: startDate,
       plannedEndAt: plannedEndDate,
       memo,
+      category,
     });
   };
 
@@ -76,6 +81,8 @@ export default function EditActiveTaskModal({ log, onClose, onConfirm }: Props) 
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
         </div>
+
+        <CategorySelect value={category} onChange={setCategory} />
 
         <div className="space-y-2">
           <label className="block text-sm text-slate-300">開始時刻</label>

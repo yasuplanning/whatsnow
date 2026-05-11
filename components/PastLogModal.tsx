@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Modal from "./Modal";
+import CategorySelect from "./CategorySelect";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
+import { inferCategoryFromTitleAndMemo, type Category } from "@/lib/category";
 
 interface Props {
   onClose: () => void;
@@ -11,6 +13,7 @@ interface Props {
     startAt: Date;
     endAt: Date;
     memo: string;
+    category: Category;
   }) => void;
 }
 
@@ -21,7 +24,23 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
   const [start, setStart] = useState<string>(toDatetimeLocal(oneHourAgo));
   const [end, setEnd] = useState<string>(toDatetimeLocal(now));
   const [memo, setMemo] = useState<string>("");
+  const [category, setCategory] = useState<Category>("その他");
+  const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
+
+  const handleTaskChange = (next: string) => {
+    setTask(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(next, memo));
+    }
+  };
+
+  const handleMemoChange = (next: string) => {
+    setMemo(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(task, next));
+    }
+  };
 
   const handleSubmit = () => {
     const trimmedTask = task.trim();
@@ -39,7 +58,13 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
       setError("終了時刻は開始時刻より後にしてください。");
       return;
     }
-    onConfirm({ task: trimmedTask, startAt: startDate, endAt: endDate, memo });
+    onConfirm({
+      task: trimmedTask,
+      startAt: startDate,
+      endAt: endDate,
+      memo,
+      category,
+    });
   };
 
   return (
@@ -49,12 +74,20 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
           <label className="block text-sm text-slate-300">やった内容</label>
           <textarea
             value={task}
-            onChange={(e) => setTask(e.target.value)}
+            onChange={(e) => handleTaskChange(e.target.value)}
             rows={3}
             placeholder="例: 打ち合わせ、作業、外出など"
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
         </div>
+
+        <CategorySelect
+          value={category}
+          onChange={(c) => {
+            setCategoryDirty(true);
+            setCategory(c);
+          }}
+        />
 
         <div className="grid grid-cols-1 gap-3">
           <div className="space-y-2">
@@ -81,7 +114,7 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
           <label className="block text-sm text-slate-300">メモ（任意）</label>
           <textarea
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => handleMemoChange(e.target.value)}
             rows={3}
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
