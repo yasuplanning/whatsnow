@@ -1,0 +1,18 @@
+{
+  "name": "what are you doing now?",
+  "short_name": "whatsnow",
+  "description": "ローカル保存型ライフログアプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f1a",
+  "theme_color": "#0b0f1a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
