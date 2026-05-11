@@ -49,4 +49,21 @@ export interface TodoItem {
   createdAt: string;
   updatedAt: string;
   doneAt: string | null;
+  recurringTodoId?: string | null;
+  recurringPeriodKey?: string | null;
+}
+
+export type RecurringFrequency = "monthly" | "yearly";
+
+export interface RecurringTodo {
+  id: string;
+  title: string;
+  memo: string;
+  frequency: RecurringFrequency;
+  dayOfMonth: number;
+  monthOfYear: number | null;
+  deadlineDays: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

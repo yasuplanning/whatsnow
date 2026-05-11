@@ -9,6 +9,7 @@ interface Props {
   onAddEvent: () => void;
   onListEvents: () => void;
   onManageTodos: () => void;
+  onManageRecurring: () => void;
   onDelete: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function MenuModal({
   onAddEvent,
   onListEvents,
   onManageTodos,
+  onManageRecurring,
   onDelete,
 }: Props) {
   return (
@@ -51,6 +53,13 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           やるべきこと
+        </button>
+        <button
+          type="button"
+          onClick={onManageRecurring}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          毎月・毎年やるべきこと
         </button>
         <button
           type="button"

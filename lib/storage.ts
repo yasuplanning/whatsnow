@@ -2,6 +2,7 @@ import type {
   CheckinEntry,
   EventEntry,
   LogEntry,
+  RecurringTodo,
   TodoItem,
 } from "./types";
 
@@ -10,6 +11,7 @@ const EVENT_STORAGE_KEY = "whatsnow.events.v1";
 const CHECKIN_STORAGE_KEY = "whatsnow.checkins.v1";
 const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
 const TODO_STORAGE_KEY = "whatsnow.todos.v1";
+const RECURRING_TODO_STORAGE_KEY = "whatsnow.recurringTodos.v1";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -196,6 +198,8 @@ export function getTodos(): TodoItem[] {
     return parsed.map((item) => ({
       ...item,
       deadline: item?.deadline ?? null,
+      recurringTodoId: item?.recurringTodoId ?? null,
+      recurringPeriodKey: item?.recurringPeriodKey ?? null,
     })) as TodoItem[];
   } catch {
     return [];
@@ -271,6 +275,72 @@ export function moveTodoDown(todos: TodoItem[], id: string): TodoItem[] {
   const idx = openIds.indexOf(id);
   if (idx === -1 || idx === openIds.length - 1) return todos;
   return swapTodosByIds(todos, id, openIds[idx + 1]);
+}
+
+export function getRecurringTodos(): RecurringTodo[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = window.localStorage.getItem(RECURRING_TODO_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as RecurringTodo[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveRecurringTodos(items: RecurringTodo[]): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(
+      RECURRING_TODO_STORAGE_KEY,
+      JSON.stringify(items)
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function addRecurringTodo(
+  items: RecurringTodo[],
+  item: RecurringTodo
+): RecurringTodo[] {
+  return [...items, item];
+}
+
+export function updateRecurringTodo(
+  items: RecurringTodo[],
+  item: RecurringTodo
+): RecurringTodo[] {
+  const idx = items.findIndex((t) => t.id === item.id);
+  if (idx === -1) return [...items, item];
+  const next = items.slice();
+  next[idx] = item;
+  return next;
+}
+
+export function deleteRecurringTodo(
+  items: RecurringTodo[],
+  id: string
+): RecurringTodo[] {
+  return items.filter((t) => t.id !== id);
+}
+
+export function getRecurringTodoById(
+  items: RecurringTodo[],
+  id: string
+): RecurringTodo | null {
+  return items.find((t) => t.id === id) ?? null;
+}
+
+export function clearAllRecurringTodos(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(RECURRING_TODO_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export function clearAllTodos(): void {

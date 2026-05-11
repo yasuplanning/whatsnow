@@ -28,15 +28,6 @@ export function formatDuration(ms: number): string {
   return `${sign}${pad2(h)}:${pad2(m)}:${pad2(s)}`;
 }
 
-export function buildHalfHourOptions(): string[] {
-  const out: string[] = [];
-  for (let h = 0; h < 24; h++) {
-    out.push(`${pad2(h)}:00`);
-    out.push(`${pad2(h)}:30`);
-  }
-  return out;
-}
-
 export function toDatetimeLocal(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }

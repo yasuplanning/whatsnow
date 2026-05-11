@@ -5,19 +5,24 @@ import type {
   CheckinEntry,
   EventEntry,
   LogEntry,
+  RecurringTodo,
   TodoItem,
 } from "@/lib/types";
 import {
+  addRecurringTodo,
   addTodo,
   clearAllCheckins,
   clearAllEvents,
   clearAllLogs,
+  clearAllRecurringTodos,
   clearAllTodos,
   clearLastActivityAt,
   completeTodo,
+  deleteRecurringTodo,
   deleteTodo,
   findActiveLog,
   generateId,
+  getRecurringTodos,
   getTodoById,
   getTodos,
   loadCheckins,
@@ -31,19 +36,21 @@ import {
   saveEvents,
   saveLastActivityAt,
   saveLogs,
+  saveRecurringTodos,
   saveTodos,
+  updateRecurringTodo,
   updateTodo,
   upsertCheckin,
   upsertEvent,
   upsertLog,
 } from "@/lib/storage";
+import { generateRecurringTodosForNow } from "@/lib/recurring";
 import { downloadCsv, entriesForDate } from "@/lib/csv";
 import {
   ensureNotificationPermission,
   showNotification,
 } from "@/lib/notification";
 import { formatClock, formatDuration } from "@/lib/time";
-import PlannedEndModal from "@/components/PlannedEndModal";
 import EndModal from "@/components/EndModal";
 import MenuModal from "@/components/MenuModal";
 import ExportModal from "@/components/ExportModal";
@@ -57,18 +64,23 @@ import TodoManageModal from "@/components/TodoManageModal";
 import TodoQuickPickModal from "@/components/TodoQuickPickModal";
 import TodoFormModal from "@/components/TodoFormModal";
 import TodoFollowupModal from "@/components/TodoFollowupModal";
+import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
+import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
 type Phase =
   | { kind: "initial" }
-  | { kind: "askPlannedEnd"; task: string; startAt: Date }
   | { kind: "active" }
   | { kind: "askEnd" };
 
 type TodoFormState =
   | { mode: "add" }
   | { mode: "edit"; todo: TodoItem };
+
+type RecurringFormState =
+  | { mode: "add" }
+  | { mode: "edit"; item: RecurringTodo };
 
 export default function Page() {
   const [mounted, setMounted] = useState(false);
@@ -92,6 +104,11 @@ export default function Page() {
   const [todoQuickPickOpen, setTodoQuickPickOpen] = useState(false);
   const [todoForm, setTodoForm] = useState<TodoFormState | null>(null);
   const [todoFollowup, setTodoFollowup] = useState<TodoItem | null>(null);
+  const [recurringTodos, setRecurringTodos] = useState<RecurringTodo[]>([]);
+  const [recurringManageOpen, setRecurringManageOpen] = useState(false);
+  const [recurringForm, setRecurringForm] = useState<RecurringFormState | null>(
+    null
+  );
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
@@ -108,7 +125,20 @@ export default function Page() {
     setLogs(loaded);
     setEvents(loadEvents());
     setCheckins(loadCheckins());
-    setTodos(getTodos());
+    const loadedTodos = getTodos();
+    const loadedRecurring = getRecurringTodos();
+    const additions = generateRecurringTodosForNow(
+      loadedRecurring,
+      loadedTodos,
+      new Date()
+    );
+    const finalTodos =
+      additions.length > 0 ? [...loadedTodos, ...additions] : loadedTodos;
+    if (additions.length > 0) {
+      saveTodos(finalTodos);
+    }
+    setTodos(finalTodos);
+    setRecurringTodos(loadedRecurring);
     setLastActivityAt(loadLastActivityAt());
     if (findActiveLog(loaded)) {
       setPhase({ kind: "active" });
@@ -171,6 +201,11 @@ export default function Page() {
     saveTodos(next);
   }, []);
 
+  const persistRecurring = useCallback((next: RecurringTodo[]) => {
+    setRecurringTodos(next);
+    saveRecurringTodos(next);
+  }, []);
+
   const markActivity = useCallback(() => {
     const iso = new Date().toISOString();
     setLastActivityAt(iso);
@@ -181,18 +216,14 @@ export default function Page() {
     const trimmed = task.trim();
     if (!trimmed) return;
     void ensureNotificationPermission();
-    setPhase({ kind: "askPlannedEnd", task: trimmed, startAt: new Date() });
-  };
-
-  const handlePlannedEndConfirm = (plannedEndAt: Date | null) => {
-    if (phase.kind !== "askPlannedEnd") return;
-    const nowIso = new Date().toISOString();
+    const startAt = new Date();
+    const nowIso = startAt.toISOString();
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
-      task: phase.task,
-      startAt: phase.startAt.toISOString(),
-      plannedEndAt: plannedEndAt ? plannedEndAt.toISOString() : null,
+      task: trimmed,
+      startAt: nowIso,
+      plannedEndAt: null,
       endAt: null,
       memo: "",
       status: "active",
@@ -272,11 +303,13 @@ export default function Page() {
     clearAllEvents();
     clearAllCheckins();
     clearAllTodos();
+    clearAllRecurringTodos();
     clearLastActivityAt();
     setLogs([]);
     setEvents([]);
     setCheckins([]);
     setTodos([]);
+    setRecurringTodos([]);
     setLastActivityAt(null);
     setPendingTodoId(null);
     plannedEndNotifiedRef.current.clear();
@@ -434,6 +467,79 @@ export default function Page() {
     setTodoFollowup(null);
   };
 
+  const applyRecurringGeneration = useCallback(
+    (templatesNext: RecurringTodo[], todosNext: TodoItem[]) => {
+      const additions = generateRecurringTodosForNow(
+        templatesNext,
+        todosNext,
+        new Date()
+      );
+      if (additions.length === 0) {
+        setTodos(todosNext);
+        return;
+      }
+      const merged = [...todosNext, ...additions];
+      setTodos(merged);
+      saveTodos(merged);
+    },
+    []
+  );
+
+  const handleRecurringSubmit = (input: {
+    title: string;
+    memo: string;
+    frequency: RecurringTodo["frequency"];
+    dayOfMonth: number;
+    monthOfYear: number | null;
+    deadlineDays: number;
+    enabled: boolean;
+  }) => {
+    if (!recurringForm) return;
+    const nowIso = new Date().toISOString();
+    let nextTemplates: RecurringTodo[];
+    if (recurringForm.mode === "add") {
+      const entry: RecurringTodo = {
+        id: generateId(),
+        title: input.title,
+        memo: input.memo,
+        frequency: input.frequency,
+        dayOfMonth: input.dayOfMonth,
+        monthOfYear: input.monthOfYear,
+        deadlineDays: input.deadlineDays,
+        enabled: input.enabled,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      nextTemplates = addRecurringTodo(recurringTodos, entry);
+    } else {
+      const updated: RecurringTodo = {
+        ...recurringForm.item,
+        title: input.title,
+        memo: input.memo,
+        frequency: input.frequency,
+        dayOfMonth: input.dayOfMonth,
+        monthOfYear: input.monthOfYear,
+        deadlineDays: input.deadlineDays,
+        enabled: input.enabled,
+        updatedAt: nowIso,
+      };
+      nextTemplates = updateRecurringTodo(recurringTodos, updated);
+    }
+    persistRecurring(nextTemplates);
+    setRecurringForm(null);
+    applyRecurringGeneration(nextTemplates, todos);
+  };
+
+  const handleRecurringDelete = () => {
+    if (!recurringForm || recurringForm.mode !== "edit") return;
+    const nextTemplates = deleteRecurringTodo(
+      recurringTodos,
+      recurringForm.item.id
+    );
+    persistRecurring(nextTemplates);
+    setRecurringForm(null);
+  };
+
   const handleFollowupContinue = (input: { progress: number; memo: string }) => {
     if (!todoFollowup) return;
     const current = getTodoById(todos, todoFollowup.id);
@@ -487,10 +593,7 @@ export default function Page() {
       </header>
 
       <section className="mx-auto w-full max-w-md px-4 pb-24 pt-2">
-        {(!mounted ||
-          phase.kind === "initial" ||
-          phase.kind === "askPlannedEnd") &&
-          !activeLog && (
+        {(!mounted || phase.kind === "initial") && !activeLog && (
             <div className="space-y-6">
               <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
                 what are you doing now?
@@ -594,13 +697,6 @@ export default function Page() {
         )}
       </section>
 
-      {phase.kind === "askPlannedEnd" && (
-        <PlannedEndModal
-          startAt={phase.startAt}
-          onClose={() => setPhase({ kind: "initial" })}
-          onConfirm={handlePlannedEndConfirm}
-        />
-      )}
       {phase.kind === "askEnd" && (
         <EndModal
           onClose={() => setPhase({ kind: "active" })}
@@ -614,7 +710,8 @@ export default function Page() {
         !eventOpen &&
         !eventListOpen &&
         !editOpen &&
-        !todoManageOpen && (
+        !todoManageOpen &&
+        !recurringManageOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onExport={() => setExportOpen(true)}
@@ -623,6 +720,10 @@ export default function Page() {
             onListEvents={() => setEventListOpen(true)}
             onManageTodos={() => {
               setTodoManageOpen(true);
+              setMenuOpen(false);
+            }}
+            onManageRecurring={() => {
+              setRecurringManageOpen(true);
               setMenuOpen(false);
             }}
             onDelete={() => setDeleteOpen(true)}
@@ -701,6 +802,24 @@ export default function Page() {
           onClose={() => setTodoFollowup(null)}
           onComplete={handleFollowupComplete}
           onContinue={handleFollowupContinue}
+        />
+      )}
+      {recurringManageOpen && !recurringForm && (
+        <RecurringTodoManageModal
+          items={recurringTodos}
+          onClose={() => setRecurringManageOpen(false)}
+          onAdd={() => setRecurringForm({ mode: "add" })}
+          onEdit={(item) => setRecurringForm({ mode: "edit", item })}
+        />
+      )}
+      {recurringForm && (
+        <RecurringTodoFormModal
+          initial={recurringForm.mode === "edit" ? recurringForm.item : null}
+          onClose={() => setRecurringForm(null)}
+          onSubmit={handleRecurringSubmit}
+          onDelete={
+            recurringForm.mode === "edit" ? handleRecurringDelete : undefined
+          }
         />
       )}
       {deleteOpen && (
