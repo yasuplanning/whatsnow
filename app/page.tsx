@@ -1,21 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { EventEntry, LogEntry } from "@/lib/types";
+import type { CheckinEntry, EventEntry, LogEntry } from "@/lib/types";
 import {
+  clearAllCheckins,
   clearAllEvents,
   clearAllLogs,
+  clearLastActivityAt,
   findActiveLog,
   generateId,
+  loadCheckins,
   loadEvents,
+  loadLastActivityAt,
   loadLogs,
   removeEvent,
+  saveCheckins,
   saveEvents,
+  saveLastActivityAt,
   saveLogs,
+  upsertCheckin,
   upsertEvent,
   upsertLog,
 } from "@/lib/storage";
-import { downloadCsv, logsForDate } from "@/lib/csv";
+import { downloadCsv, entriesForDate } from "@/lib/csv";
 import {
   ensureNotificationPermission,
   showNotification,
@@ -30,6 +37,9 @@ import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import PastLogModal from "@/components/PastLogModal";
 import EventModal from "@/components/EventModal";
 import EventListModal from "@/components/EventListModal";
+import CheckinModal from "@/components/CheckinModal";
+
+const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
 type Phase =
   | { kind: "initial" }
@@ -42,6 +52,8 @@ export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [events, setEvents] = useState<EventEntry[]>([]);
+  const [checkins, setCheckins] = useState<CheckinEntry[]>([]);
+  const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
   const [task, setTask] = useState<string>("");
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -50,8 +62,10 @@ export default function Page() {
   const [pastOpen, setPastOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [eventListOpen, setEventListOpen] = useState(false);
+  const [checkinOpen, setCheckinOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
-  const notifiedRef = useRef<Set<string>>(new Set());
+  const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
+  const inactivityNotifiedRef = useRef<string | null>(null);
 
   const activeLog = useMemo(() => findActiveLog(logs), [logs]);
 
@@ -60,6 +74,8 @@ export default function Page() {
     const loaded = loadLogs();
     setLogs(loaded);
     setEvents(loadEvents());
+    setCheckins(loadCheckins());
+    setLastActivityAt(loadLastActivityAt());
     if (findActiveLog(loaded)) {
       setPhase({ kind: "active" });
     }
@@ -75,15 +91,31 @@ export default function Page() {
     if (!activeLog || !activeLog.plannedEndAt) return;
     const planned = new Date(activeLog.plannedEndAt).getTime();
     if (Number.isNaN(planned)) return;
-    if (notifiedRef.current.has(activeLog.id)) return;
+    if (plannedEndNotifiedRef.current.has(activeLog.id)) return;
     if (now >= planned) {
-      notifiedRef.current.add(activeLog.id);
+      plannedEndNotifiedRef.current.add(activeLog.id);
       showNotification(
         "終了予定時刻です",
-        `「${activeLog.task}」の予定終了時刻になりました。`
+        `「${activeLog.task}」の予定終了時刻になりました。`,
+        () => setPhase({ kind: "askEnd" })
       );
     }
   }, [now, activeLog]);
+
+  useEffect(() => {
+    if (!lastActivityAt) return;
+    const last = new Date(lastActivityAt).getTime();
+    if (Number.isNaN(last)) return;
+    if (inactivityNotifiedRef.current === lastActivityAt) return;
+    if (now - last >= INACTIVITY_THRESHOLD_MS) {
+      inactivityNotifiedRef.current = lastActivityAt;
+      showNotification(
+        "今何をしていますか？",
+        "しばらく記録がありません。今やっていることを軽くメモしてください。",
+        () => setCheckinOpen(true)
+      );
+    }
+  }, [now, lastActivityAt]);
 
   const persist = useCallback((next: LogEntry[]) => {
     setLogs(next);
@@ -93,6 +125,17 @@ export default function Page() {
   const persistEvents = useCallback((next: EventEntry[]) => {
     setEvents(next);
     saveEvents(next);
+  }, []);
+
+  const persistCheckins = useCallback((next: CheckinEntry[]) => {
+    setCheckins(next);
+    saveCheckins(next);
+  }, []);
+
+  const markActivity = useCallback(() => {
+    const iso = new Date().toISOString();
+    setLastActivityAt(iso);
+    saveLastActivityAt(iso);
   }, []);
 
   const handleRegisterClick = () => {
@@ -112,6 +155,7 @@ export default function Page() {
     const nowIso = new Date().toISOString();
     const entry: LogEntry = {
       id: generateId(),
+      type: "task",
       task: phase.task,
       startAt: phase.startAt.toISOString(),
       plannedEndAt: plannedEndAt ? plannedEndAt.toISOString() : null,
@@ -124,6 +168,7 @@ export default function Page() {
     persist(upsertLog(logs, entry));
     setTask("");
     setPhase({ kind: "active" });
+    markActivity();
   };
 
   const handleEndConfirm = (endAt: Date, memo: string) => {
@@ -140,13 +185,19 @@ export default function Page() {
       updatedAt: nowIso,
     };
     persist(upsertLog(logs, updated));
-    notifiedRef.current.delete(activeLog.id);
+    plannedEndNotifiedRef.current.delete(activeLog.id);
     setPhase({ kind: "initial" });
+    markActivity();
   };
 
   const handleExport = (dateKey: string) => {
-    const targets = logsForDate(logs, dateKey);
-    downloadCsv(dateKey, targets);
+    const { tasks, events: dayEvents, checkins: dayCheckins } = entriesForDate(
+      logs,
+      events,
+      checkins,
+      dateKey
+    );
+    downloadCsv(dateKey, tasks, dayEvents, dayCheckins);
     setExportOpen(false);
     setMenuOpen(false);
   };
@@ -154,9 +205,14 @@ export default function Page() {
   const handleDeleteAll = () => {
     clearAllLogs();
     clearAllEvents();
+    clearAllCheckins();
+    clearLastActivityAt();
     setLogs([]);
     setEvents([]);
-    notifiedRef.current.clear();
+    setCheckins([]);
+    setLastActivityAt(null);
+    plannedEndNotifiedRef.current.clear();
+    inactivityNotifiedRef.current = null;
     setDeleteOpen(false);
     setMenuOpen(false);
     setPhase({ kind: "initial" });
@@ -171,6 +227,7 @@ export default function Page() {
     const nowIso = new Date().toISOString();
     const entry: LogEntry = {
       id: generateId(),
+      type: "task",
       task: input.task,
       startAt: input.startAt.toISOString(),
       plannedEndAt: null,
@@ -183,6 +240,7 @@ export default function Page() {
     persist(upsertLog(logs, entry));
     setPastOpen(false);
     setMenuOpen(false);
+    markActivity();
   };
 
   const handleAddEvent = (input: {
@@ -194,6 +252,7 @@ export default function Page() {
     const nowIso = new Date().toISOString();
     const entry: EventEntry = {
       id: generateId(),
+      type: "event",
       content: input.content,
       photo: input.photo,
       memo: input.memo,
@@ -204,10 +263,31 @@ export default function Page() {
     persistEvents(upsertEvent(events, entry));
     setEventOpen(false);
     setMenuOpen(false);
+    markActivity();
   };
 
   const handleDeleteEvent = (id: string) => {
     persistEvents(removeEvent(events, id));
+  };
+
+  const handleAddCheckin = (text: string) => {
+    const nowIso = new Date().toISOString();
+    const entry: CheckinEntry = {
+      id: generateId(),
+      type: "checkin",
+      text,
+      checkedAt: nowIso,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    persistCheckins(upsertCheckin(checkins, entry));
+    setCheckinOpen(false);
+    markActivity();
+  };
+
+  const openCheckin = () => {
+    void ensureNotificationPermission();
+    setCheckinOpen(true);
   };
 
   const elapsedMs = activeLog
@@ -231,28 +311,32 @@ export default function Page() {
       </header>
 
       <section className="mx-auto w-full max-w-md px-4 pb-24 pt-2">
-        {(!mounted || phase.kind === "initial" || phase.kind === "askStart" || phase.kind === "askPlannedEnd") && !activeLog && (
-          <div className="space-y-6">
-            <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
-              what are you doing now?
-            </h1>
-            <textarea
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="例: 資料作成、休憩、移動など"
-              rows={6}
-              className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
-            />
-            <button
-              type="button"
-              onClick={handleRegisterClick}
-              disabled={!task.trim()}
-              className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-            >
-              登録
-            </button>
-          </div>
-        )}
+        {(!mounted ||
+          phase.kind === "initial" ||
+          phase.kind === "askStart" ||
+          phase.kind === "askPlannedEnd") &&
+          !activeLog && (
+            <div className="space-y-6">
+              <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
+                what are you doing now?
+              </h1>
+              <textarea
+                value={task}
+                onChange={(e) => setTask(e.target.value)}
+                placeholder="例: 資料作成、皿洗い、移動など"
+                rows={6}
+                className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
+              />
+              <button
+                type="button"
+                onClick={handleRegisterClick}
+                disabled={!task.trim()}
+                className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                タスクを追加
+              </button>
+            </div>
+          )}
 
         {mounted && activeLog && (
           <div className="space-y-6">
@@ -291,6 +375,18 @@ export default function Page() {
               className="w-full rounded-2xl bg-emerald-500 py-5 text-xl font-bold text-white hover:bg-emerald-400"
             >
               終了する
+            </button>
+          </div>
+        )}
+
+        {mounted && (
+          <div className="pt-6">
+            <button
+              type="button"
+              onClick={openCheckin}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
+            >
+              今何をしているかメモ
             </button>
           </div>
         )}
@@ -353,6 +449,12 @@ export default function Page() {
           events={events}
           onClose={() => setEventListOpen(false)}
           onDelete={handleDeleteEvent}
+        />
+      )}
+      {checkinOpen && (
+        <CheckinModal
+          onClose={() => setCheckinOpen(false)}
+          onConfirm={handleAddCheckin}
         />
       )}
       {deleteOpen && (

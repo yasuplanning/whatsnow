@@ -34,7 +34,7 @@ export default function MenuModal({
           onClick={onAddEvent}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          イベント追加
+          イベントを追加
         </button>
         <button
           type="button"

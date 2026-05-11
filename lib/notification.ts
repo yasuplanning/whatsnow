@@ -14,11 +14,39 @@ export async function ensureNotificationPermission(): Promise<NotificationPermis
   }
 }
 
-export function showNotification(title: string, body: string): void {
+export function showNotification(
+  title: string,
+  body: string,
+  onClick?: () => void
+): void {
   if (!isNotificationSupported()) return;
   try {
     if (Notification.permission !== "granted") return;
-    new Notification(title, { body });
+    const n = new Notification(title, { body });
+    if (onClick) {
+      n.onclick = (ev) => {
+        try {
+          ev.preventDefault();
+        } catch {
+          // ignore
+        }
+        try {
+          window.focus();
+        } catch {
+          // ignore
+        }
+        try {
+          onClick();
+        } catch {
+          // ignore
+        }
+        try {
+          n.close();
+        } catch {
+          // ignore
+        }
+      };
+    }
   } catch {
     // ignore
   }
