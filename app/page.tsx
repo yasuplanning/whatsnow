@@ -3,25 +3,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CheckinEntry,
+  CountdownTimer,
   EventEntry,
   LogEntry,
   RecurringTodo,
   TodoItem,
 } from "@/lib/types";
 import {
+  addCountdownTimer,
   addRecurringTodo,
   addTodo,
+  cancelCountdownTimer,
   clearAllCheckins,
+  clearAllCountdownTimers,
   clearAllEvents,
   clearAllLogs,
   clearAllRecurringTodos,
   clearAllTodos,
   clearLastActivityAt,
+  completeCountdownTimer,
   completeTodo,
   deleteRecurringTodo,
   deleteTodo,
   findActiveLog,
   generateId,
+  getCountdownTimers,
   getRecurringTodos,
   getTodoById,
   getTodos,
@@ -33,6 +39,7 @@ import {
   moveTodoUp,
   removeEvent,
   saveCheckins,
+  saveCountdownTimers,
   saveEvents,
   saveLastActivityAt,
   saveLogs,
@@ -66,6 +73,9 @@ import TodoFormModal from "@/components/TodoFormModal";
 import TodoFollowupModal from "@/components/TodoFollowupModal";
 import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
 import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
+import CountdownFormModal from "@/components/CountdownFormModal";
+import CountdownCentralPanel from "@/components/CountdownCentralPanel";
+import CountdownMiniDock from "@/components/CountdownMiniDock";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -109,6 +119,8 @@ export default function Page() {
   const [recurringForm, setRecurringForm] = useState<RecurringFormState | null>(
     null
   );
+  const [timers, setTimers] = useState<CountdownTimer[]>([]);
+  const [countdownFormOpen, setCountdownFormOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
@@ -139,6 +151,7 @@ export default function Page() {
     }
     setTodos(finalTodos);
     setRecurringTodos(loadedRecurring);
+    setTimers(getCountdownTimers());
     setLastActivityAt(loadLastActivityAt());
     if (findActiveLog(loaded)) {
       setPhase({ kind: "active" });
@@ -181,6 +194,41 @@ export default function Page() {
     }
   }, [now, lastActivityAt]);
 
+  useEffect(() => {
+    const toNotify = timers.filter(
+      (t) =>
+        t.status === "active" &&
+        !t.notified &&
+        now >= new Date(t.dueAt).getTime()
+    );
+    if (toNotify.length === 0) return;
+    const nowIso = new Date().toISOString();
+    const updated = timers.map((t) =>
+      toNotify.some((n) => n.id === t.id)
+        ? { ...t, notified: true, updatedAt: nowIso }
+        : t
+    );
+    setTimers(updated);
+    saveCountdownTimers(updated);
+    for (const t of toNotify) {
+      const targetId = t.id;
+      const targetTitle = t.title;
+      showNotification(
+        "時間です",
+        `「${targetTitle}」の時間になりました。`,
+        () => {
+          setTimers((prev) => {
+            const next = prev.map((x) =>
+              x.id === targetId ? { ...x, isMinimized: false } : x
+            );
+            saveCountdownTimers(next);
+            return next;
+          });
+        }
+      );
+    }
+  }, [now, timers]);
+
   const persist = useCallback((next: LogEntry[]) => {
     setLogs(next);
     saveLogs(next);
@@ -204,6 +252,11 @@ export default function Page() {
   const persistRecurring = useCallback((next: RecurringTodo[]) => {
     setRecurringTodos(next);
     saveRecurringTodos(next);
+  }, []);
+
+  const persistTimers = useCallback((next: CountdownTimer[]) => {
+    setTimers(next);
+    saveCountdownTimers(next);
   }, []);
 
   const markActivity = useCallback(() => {
@@ -287,13 +340,13 @@ export default function Page() {
   };
 
   const handleExport = (dateKey: string) => {
-    const { tasks, events: dayEvents, checkins: dayCheckins } = entriesForDate(
-      logs,
-      events,
-      checkins,
-      dateKey
-    );
-    downloadCsv(dateKey, tasks, dayEvents, dayCheckins, todos);
+    const {
+      tasks,
+      events: dayEvents,
+      checkins: dayCheckins,
+      countdowns: dayCountdowns,
+    } = entriesForDate(logs, events, checkins, timers, dateKey);
+    downloadCsv(dateKey, tasks, dayEvents, dayCheckins, dayCountdowns, todos);
     setExportOpen(false);
     setMenuOpen(false);
   };
@@ -304,12 +357,14 @@ export default function Page() {
     clearAllCheckins();
     clearAllTodos();
     clearAllRecurringTodos();
+    clearAllCountdownTimers();
     clearLastActivityAt();
     setLogs([]);
     setEvents([]);
     setCheckins([]);
     setTodos([]);
     setRecurringTodos([]);
+    setTimers([]);
     setLastActivityAt(null);
     setPendingTodoId(null);
     plannedEndNotifiedRef.current.clear();
@@ -540,6 +595,64 @@ export default function Page() {
     setRecurringForm(null);
   };
 
+  const handleCountdownSubmit = (input: {
+    durationMinutes: number;
+    title: string;
+    memo: string;
+  }) => {
+    const activeCount = timers.filter((t) => t.status === "active").length;
+    if (activeCount >= 3) return;
+    void ensureNotificationPermission();
+    const startedAt = new Date();
+    const dueAt = new Date(
+      startedAt.getTime() + input.durationMinutes * 60 * 1000
+    );
+    const nowIso = startedAt.toISOString();
+    const entry: CountdownTimer = {
+      id: generateId(),
+      title: input.title,
+      memo: input.memo,
+      durationMinutes: input.durationMinutes,
+      startedAt: nowIso,
+      dueAt: dueAt.toISOString(),
+      completedAt: null,
+      status: "active",
+      isMinimized: false,
+      notified: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    persistTimers(addCountdownTimer(timers, entry));
+    setCountdownFormOpen(false);
+    setMenuOpen(false);
+  };
+
+  const handleTimerMinimize = (id: string) => {
+    const nowIso = new Date().toISOString();
+    persistTimers(
+      timers.map((t) =>
+        t.id === id ? { ...t, isMinimized: true, updatedAt: nowIso } : t
+      )
+    );
+  };
+
+  const handleTimerExpand = (id: string) => {
+    const nowIso = new Date().toISOString();
+    persistTimers(
+      timers.map((t) =>
+        t.id === id ? { ...t, isMinimized: false, updatedAt: nowIso } : t
+      )
+    );
+  };
+
+  const handleTimerComplete = (id: string) => {
+    persistTimers(completeCountdownTimer(timers, id));
+  };
+
+  const handleTimerCancel = (id: string) => {
+    persistTimers(cancelCountdownTimer(timers, id));
+  };
+
   const handleFollowupContinue = (input: { progress: number; memo: string }) => {
     if (!todoFollowup) return;
     const current = getTodoById(todos, todoFollowup.id);
@@ -711,7 +824,8 @@ export default function Page() {
         !eventListOpen &&
         !editOpen &&
         !todoManageOpen &&
-        !recurringManageOpen && (
+        !recurringManageOpen &&
+        !countdownFormOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onExport={() => setExportOpen(true)}
@@ -724,6 +838,10 @@ export default function Page() {
             }}
             onManageRecurring={() => {
               setRecurringManageOpen(true);
+              setMenuOpen(false);
+            }}
+            onOpenCountdown={() => {
+              setCountdownFormOpen(true);
               setMenuOpen(false);
             }}
             onDelete={() => setDeleteOpen(true)}
@@ -826,6 +944,29 @@ export default function Page() {
         <DeleteConfirmModal
           onClose={() => setDeleteOpen(false)}
           onConfirm={handleDeleteAll}
+        />
+      )}
+      {mounted && (
+        <CountdownCentralPanel
+          timers={timers}
+          now={now}
+          onMinimize={handleTimerMinimize}
+          onComplete={handleTimerComplete}
+          onCancel={handleTimerCancel}
+        />
+      )}
+      {mounted && (
+        <CountdownMiniDock
+          timers={timers}
+          now={now}
+          onExpand={handleTimerExpand}
+        />
+      )}
+      {countdownFormOpen && (
+        <CountdownFormModal
+          activeCount={timers.filter((t) => t.status === "active").length}
+          onClose={() => setCountdownFormOpen(false)}
+          onSubmit={handleCountdownSubmit}
         />
       )}
     </main>

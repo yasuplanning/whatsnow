@@ -1,5 +1,6 @@
 import type {
   CheckinEntry,
+  CountdownTimer,
   EventEntry,
   LogEntry,
   RecurringTodo,
@@ -12,6 +13,7 @@ const CHECKIN_STORAGE_KEY = "whatsnow.checkins.v1";
 const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
 const TODO_STORAGE_KEY = "whatsnow.todos.v1";
 const RECURRING_TODO_STORAGE_KEY = "whatsnow.recurringTodos.v1";
+const COUNTDOWN_STORAGE_KEY = "whatsnow.countdowns.v1";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -338,6 +340,95 @@ export function clearAllRecurringTodos(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(RECURRING_TODO_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function getCountdownTimers(): CountdownTimer[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = window.localStorage.getItem(COUNTDOWN_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as CountdownTimer[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCountdownTimers(items: CountdownTimer[]): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(COUNTDOWN_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+export function addCountdownTimer(
+  items: CountdownTimer[],
+  item: CountdownTimer
+): CountdownTimer[] {
+  return [...items, item];
+}
+
+export function updateCountdownTimer(
+  items: CountdownTimer[],
+  item: CountdownTimer
+): CountdownTimer[] {
+  const idx = items.findIndex((t) => t.id === item.id);
+  if (idx === -1) return [...items, item];
+  const next = items.slice();
+  next[idx] = item;
+  return next;
+}
+
+export function completeCountdownTimer(
+  items: CountdownTimer[],
+  id: string
+): CountdownTimer[] {
+  const nowIso = new Date().toISOString();
+  return items.map((t) =>
+    t.id === id
+      ? {
+          ...t,
+          status: "done" as const,
+          completedAt: nowIso,
+          updatedAt: nowIso,
+        }
+      : t
+  );
+}
+
+export function cancelCountdownTimer(
+  items: CountdownTimer[],
+  id: string
+): CountdownTimer[] {
+  const nowIso = new Date().toISOString();
+  return items.map((t) =>
+    t.id === id
+      ? {
+          ...t,
+          status: "cancelled" as const,
+          completedAt: nowIso,
+          updatedAt: nowIso,
+        }
+      : t
+  );
+}
+
+export function getActiveCountdownTimers(
+  items: CountdownTimer[]
+): CountdownTimer[] {
+  return items.filter((t) => t.status === "active");
+}
+
+export function clearAllCountdownTimers(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(COUNTDOWN_STORAGE_KEY);
   } catch {
     // ignore
   }

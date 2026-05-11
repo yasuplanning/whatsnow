@@ -10,6 +10,7 @@ interface Props {
   onListEvents: () => void;
   onManageTodos: () => void;
   onManageRecurring: () => void;
+  onOpenCountdown: () => void;
   onDelete: () => void;
 }
 
@@ -21,6 +22,7 @@ export default function MenuModal({
   onListEvents,
   onManageTodos,
   onManageRecurring,
+  onOpenCountdown,
   onDelete,
 }: Props) {
   return (
@@ -60,6 +62,13 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           毎月・毎年やるべきこと
+        </button>
+        <button
+          type="button"
+          onClick={onOpenCountdown}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          カウントダウンタイマー
         </button>
         <button
           type="button"

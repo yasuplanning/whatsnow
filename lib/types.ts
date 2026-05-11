@@ -53,6 +53,23 @@ export interface TodoItem {
   recurringPeriodKey?: string | null;
 }
 
+export type CountdownTimerStatus = "active" | "done" | "cancelled";
+
+export interface CountdownTimer {
+  id: string;
+  title: string;
+  memo: string;
+  durationMinutes: number;
+  startedAt: string;
+  dueAt: string;
+  completedAt: string | null;
+  status: CountdownTimerStatus;
+  isMinimized: boolean;
+  notified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type RecurringFrequency = "monthly" | "yearly";
 
 export interface RecurringTodo {
