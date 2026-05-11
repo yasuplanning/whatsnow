@@ -28,7 +28,6 @@ import {
   showNotification,
 } from "@/lib/notification";
 import { formatClock, formatDuration } from "@/lib/time";
-import StartModal from "@/components/StartModal";
 import PlannedEndModal from "@/components/PlannedEndModal";
 import EndModal from "@/components/EndModal";
 import MenuModal from "@/components/MenuModal";
@@ -38,12 +37,12 @@ import PastLogModal from "@/components/PastLogModal";
 import EventModal from "@/components/EventModal";
 import EventListModal from "@/components/EventListModal";
 import CheckinModal from "@/components/CheckinModal";
+import EditActiveTaskModal from "@/components/EditActiveTaskModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
 type Phase =
   | { kind: "initial" }
-  | { kind: "askStart"; task: string }
   | { kind: "askPlannedEnd"; task: string; startAt: Date }
   | { kind: "active" }
   | { kind: "askEnd" };
@@ -63,6 +62,7 @@ export default function Page() {
   const [eventOpen, setEventOpen] = useState(false);
   const [eventListOpen, setEventListOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
@@ -142,12 +142,7 @@ export default function Page() {
     const trimmed = task.trim();
     if (!trimmed) return;
     void ensureNotificationPermission();
-    setPhase({ kind: "askStart", task: trimmed });
-  };
-
-  const handleStartConfirm = (startAt: Date) => {
-    if (phase.kind !== "askStart") return;
-    setPhase({ kind: "askPlannedEnd", task: phase.task, startAt });
+    setPhase({ kind: "askPlannedEnd", task: trimmed, startAt: new Date() });
   };
 
   const handlePlannedEndConfirm = (plannedEndAt: Date | null) => {
@@ -169,6 +164,27 @@ export default function Page() {
     setTask("");
     setPhase({ kind: "active" });
     markActivity();
+  };
+
+  const handleEditActive = (input: {
+    task: string;
+    startAt: Date;
+    plannedEndAt: Date | null;
+    memo: string;
+  }) => {
+    if (!activeLog) return;
+    const nowIso = new Date().toISOString();
+    const updated: LogEntry = {
+      ...activeLog,
+      task: input.task,
+      startAt: input.startAt.toISOString(),
+      plannedEndAt: input.plannedEndAt ? input.plannedEndAt.toISOString() : null,
+      memo: input.memo,
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
+    plannedEndNotifiedRef.current.delete(activeLog.id);
+    setEditOpen(false);
   };
 
   const handleEndConfirm = (endAt: Date, memo: string) => {
@@ -313,7 +329,6 @@ export default function Page() {
       <section className="mx-auto w-full max-w-md px-4 pb-24 pt-2">
         {(!mounted ||
           phase.kind === "initial" ||
-          phase.kind === "askStart" ||
           phase.kind === "askPlannedEnd") &&
           !activeLog && (
             <div className="space-y-6">
@@ -371,6 +386,13 @@ export default function Page() {
 
             <button
               type="button"
+              onClick={() => setEditOpen(true)}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
+            >
+              編集
+            </button>
+            <button
+              type="button"
               onClick={() => setPhase({ kind: "askEnd" })}
               className="w-full rounded-2xl bg-emerald-500 py-5 text-xl font-bold text-white hover:bg-emerald-400"
             >
@@ -392,16 +414,10 @@ export default function Page() {
         )}
       </section>
 
-      {phase.kind === "askStart" && (
-        <StartModal
-          onClose={() => setPhase({ kind: "initial" })}
-          onConfirm={handleStartConfirm}
-        />
-      )}
       {phase.kind === "askPlannedEnd" && (
         <PlannedEndModal
           startAt={phase.startAt}
-          onClose={() => setPhase({ kind: "askStart", task: phase.task })}
+          onClose={() => setPhase({ kind: "initial" })}
           onConfirm={handlePlannedEndConfirm}
         />
       )}
@@ -416,7 +432,8 @@ export default function Page() {
         !deleteOpen &&
         !pastOpen &&
         !eventOpen &&
-        !eventListOpen && (
+        !eventListOpen &&
+        !editOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onExport={() => setExportOpen(true)}
@@ -455,6 +472,13 @@ export default function Page() {
         <CheckinModal
           onClose={() => setCheckinOpen(false)}
           onConfirm={handleAddCheckin}
+        />
+      )}
+      {editOpen && activeLog && (
+        <EditActiveTaskModal
+          log={activeLog}
+          onClose={() => setEditOpen(false)}
+          onConfirm={handleEditActive}
         />
       )}
       {deleteOpen && (
