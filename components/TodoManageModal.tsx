@@ -97,6 +97,25 @@ export default function TodoManageModal({
     });
   };
 
+  const handleSortByDeadline = () => {
+    const sorted = [...draftOpen].sort((a, b) => {
+      const aHas = a.deadline != null;
+      const bHas = b.deadline != null;
+      if (aHas && !bHas) return -1;
+      if (!aHas && bHas) return 1;
+      if (!aHas && !bHas) return 0;
+      return (
+        new Date(a.deadline as string).getTime() -
+        new Date(b.deadline as string).getTime()
+      );
+    });
+    if (sorted.map((t) => t.id).join("|") === draftOpen.map((t) => t.id).join("|")) {
+      return;
+    }
+    setDraftOpen(sorted);
+    onReorder(sorted.map((t) => t.id));
+  };
+
   const finishDrag = () => {
     if (!draggingId) return;
     const state = pointerStateRef.current;
@@ -126,6 +145,19 @@ export default function TodoManageModal({
         >
           ＋ 新規追加
         </button>
+
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-slate-300">計{draftOpen.length}個</p>
+          <button
+            type="button"
+            aria-label="期限の近い順にソート"
+            onClick={handleSortByDeadline}
+            disabled={draftOpen.length < 2}
+            className="rounded-md bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700 disabled:opacity-30"
+          >
+            <SortRefreshIcon className="h-5 w-5" />
+          </button>
+        </div>
 
         <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
           {draftOpen.length === 0 ? (
@@ -278,6 +310,26 @@ function DragHandleIcon({ className }: { className?: string }) {
       <line x1="4" y1="7" x2="20" y2="7" />
       <line x1="4" y1="12" x2="20" y2="12" />
       <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
+  );
+}
+
+function SortRefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M21 12a9 9 0 0 1-15.36 6.36L3 16" />
+      <path d="M3 12a9 9 0 0 1 15.36-6.36L21 8" />
+      <polyline points="21 3 21 8 16 8" />
+      <polyline points="3 21 3 16 8 16" />
     </svg>
   );
 }
