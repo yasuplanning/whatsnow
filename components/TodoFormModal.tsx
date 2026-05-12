@@ -4,6 +4,11 @@ import { useState } from "react";
 import Modal from "./Modal";
 import type { TodoItem } from "@/lib/types";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
+import {
+  inferCategoryFromTitleAndMemo,
+  type Category,
+} from "@/lib/category";
+import CategorySelect from "./CategorySelect";
 
 interface Props {
   initial: TodoItem | null;
@@ -13,6 +18,7 @@ interface Props {
     memo: string;
     progress: number;
     deadline: Date | null;
+    category: Category;
   }) => void;
   onComplete?: () => void;
   onDelete?: () => void;
@@ -37,6 +43,10 @@ export default function TodoFormModal({
   const isEdit = initial !== null;
   const [title, setTitle] = useState<string>(initial?.title ?? "");
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
+  const [category, setCategory] = useState<Category>(
+    initial?.category ?? "その他"
+  );
+  const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [progress, setProgress] = useState<number>(() => {
     const init = initial?.progress ?? 0;
     if (init >= 100) return 90;
@@ -71,7 +81,22 @@ export default function TodoFormModal({
       memo,
       progress,
       deadline: deadlineDate,
+      category,
     });
+  };
+
+  const handleTitleChange = (next: string) => {
+    setTitle(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(next, memo));
+    }
+  };
+
+  const handleMemoChange = (next: string) => {
+    setMemo(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(title, next));
+    }
   };
 
   const handleComplete = () => {
@@ -98,7 +123,7 @@ export default function TodoFormModal({
           <input
             type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="例: 確定申告の書類をまとめる"
             className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
@@ -108,12 +133,20 @@ export default function TodoFormModal({
           <label className="block text-sm text-slate-300">memo（任意）</label>
           <textarea
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => handleMemoChange(e.target.value)}
             rows={3}
             placeholder="気をつけたいこと、次に進める一歩など"
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
         </div>
+
+        <CategorySelect
+          value={category}
+          onChange={(c) => {
+            setCategoryDirty(true);
+            setCategory(c);
+          }}
+        />
 
         <div className="space-y-2">
           <label className="block text-sm text-slate-300">progress</label>

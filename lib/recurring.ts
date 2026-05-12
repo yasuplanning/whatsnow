@@ -103,6 +103,7 @@ export function generateRecurringTodosForNow(
       id: generateId(),
       title: `${template.title}${info.suffix}`,
       memo: template.memo,
+      category: template.category,
       progress: 0,
       status: "open",
       deadline: info.deadlineDate.toISOString(),

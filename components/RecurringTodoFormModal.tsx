@@ -3,6 +3,11 @@
 import { useState } from "react";
 import Modal from "./Modal";
 import type { RecurringFrequency, RecurringTodo } from "@/lib/types";
+import {
+  inferCategoryFromTitleAndMemo,
+  type Category,
+} from "@/lib/category";
+import CategorySelect from "./CategorySelect";
 
 interface Props {
   initial: RecurringTodo | null;
@@ -15,6 +20,7 @@ interface Props {
     monthOfYear: number | null;
     deadlineDays: number;
     enabled: boolean;
+    category: Category;
   }) => void;
   onDelete?: () => void;
 }
@@ -32,6 +38,10 @@ export default function RecurringTodoFormModal({
   const isEdit = initial !== null;
   const [title, setTitle] = useState<string>(initial?.title ?? "");
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
+  const [category, setCategory] = useState<Category>(
+    initial?.category ?? "その他"
+  );
+  const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [frequency, setFrequency] = useState<RecurringFrequency>(
     initial?.frequency ?? "monthly"
   );
@@ -59,7 +69,22 @@ export default function RecurringTodoFormModal({
       monthOfYear: frequency === "yearly" ? monthOfYear : null,
       deadlineDays,
       enabled,
+      category,
     });
+  };
+
+  const handleTitleChange = (next: string) => {
+    setTitle(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(next, memo));
+    }
+  };
+
+  const handleMemoChange = (next: string) => {
+    setMemo(next);
+    if (!categoryDirty) {
+      setCategory(inferCategoryFromTitleAndMemo(title, next));
+    }
   };
 
   const handleDelete = () => {
@@ -81,7 +106,7 @@ export default function RecurringTodoFormModal({
           <input
             type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="例: 請求書確認"
             className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
@@ -91,11 +116,19 @@ export default function RecurringTodoFormModal({
           <label className="block text-sm text-slate-300">memo（任意）</label>
           <textarea
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => handleMemoChange(e.target.value)}
             rows={2}
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
         </div>
+
+        <CategorySelect
+          value={category}
+          onChange={(c) => {
+            setCategoryDirty(true);
+            setCategory(c);
+          }}
+        />
 
         <div className="space-y-2">
           <label className="block text-sm text-slate-300">繰り返し</label>

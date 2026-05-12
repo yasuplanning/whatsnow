@@ -69,6 +69,7 @@ export interface RecurringTodo {
   id: string;
   title: string;
   memo: string;
+  category: Category;
   frequency: RecurringFrequency;
   dayOfMonth: number;
   monthOfYear: number | null;
@@ -84,6 +85,7 @@ export interface TodoItem {
   id: string;
   title: string;
   memo: string;
+  category: Category;
   progress: number;
   status: TodoStatus;
   deadline: string | null;

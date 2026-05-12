@@ -141,7 +141,7 @@ export function todoDoneToUnified(t: TodoItem): UnifiedLog {
     id: t.id,
     type: "todoDone",
     title: t.title,
-    category: null,
+    category: t.category,
     startAt: null,
     endAt: t.doneAt,
     scheduledEndAt: t.deadline,

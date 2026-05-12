@@ -35,9 +35,8 @@ import {
   loadEvents,
   loadLastActivityAt,
   loadLogs,
-  moveTodoDown,
-  moveTodoUp,
   removeEvent,
+  reorderOpenTodos,
   savePhoto,
   saveCheckins,
   saveCountdownTimers,
@@ -82,7 +81,6 @@ import EventListModal from "@/components/EventListModal";
 import CheckinModal from "@/components/CheckinModal";
 import EditActiveTaskModal from "@/components/EditActiveTaskModal";
 import TodoManageModal from "@/components/TodoManageModal";
-import TodoQuickPickModal from "@/components/TodoQuickPickModal";
 import TodoFormModal from "@/components/TodoFormModal";
 import TodoFollowupModal from "@/components/TodoFollowupModal";
 import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
@@ -127,7 +125,6 @@ export default function Page() {
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [todoManageOpen, setTodoManageOpen] = useState(false);
-  const [todoQuickPickOpen, setTodoQuickPickOpen] = useState(false);
   const [todoForm, setTodoForm] = useState<TodoFormState | null>(null);
   const [todoFollowup, setTodoFollowup] = useState<TodoItem | null>(null);
   const [recurringTodos, setRecurringTodos] = useState<RecurringTodo[]>([]);
@@ -525,8 +522,10 @@ export default function Page() {
 
   const handleQuickPickTodo = (todo: TodoItem) => {
     setTask(todo.title);
+    setTaskCategory(todo.category);
+    setTaskCategoryDirty(true);
     setPendingTodoId(todo.id);
-    setTodoQuickPickOpen(false);
+    setTodoManageOpen(false);
   };
 
   const handleTodoSubmit = (input: {
@@ -534,6 +533,7 @@ export default function Page() {
     memo: string;
     progress: number;
     deadline: Date | null;
+    category: Category;
   }) => {
     const nowIso = nowJstIso();
     if (!todoForm) return;
@@ -542,6 +542,7 @@ export default function Page() {
         id: generateId(),
         title: input.title,
         memo: input.memo,
+        category: input.category,
         progress: input.progress,
         status: "open",
         deadline: input.deadline ? toJstIso(input.deadline) : null,
@@ -555,6 +556,7 @@ export default function Page() {
         ...todoForm.todo,
         title: input.title,
         memo: input.memo,
+        category: input.category,
         progress: input.progress,
         deadline: input.deadline ? toJstIso(input.deadline) : null,
         updatedAt: nowIso,
@@ -564,12 +566,8 @@ export default function Page() {
     setTodoForm(null);
   };
 
-  const handleMoveTodoUp = (id: string) => {
-    persistTodos(moveTodoUp(todos, id));
-  };
-
-  const handleMoveTodoDown = (id: string) => {
-    persistTodos(moveTodoDown(todos, id));
+  const handleReorderTodos = (orderedOpenIds: string[]) => {
+    persistTodos(reorderOpenTodos(todos, orderedOpenIds));
   };
 
   const handleTodoComplete = () => {
@@ -623,6 +621,7 @@ export default function Page() {
     monthOfYear: number | null;
     deadlineDays: number;
     enabled: boolean;
+    category: Category;
   }) => {
     if (!recurringForm) return;
     const nowIso = nowJstIso();
@@ -632,6 +631,7 @@ export default function Page() {
         id: generateId(),
         title: input.title,
         memo: input.memo,
+        category: input.category,
         frequency: input.frequency,
         dayOfMonth: input.dayOfMonth,
         monthOfYear: input.monthOfYear,
@@ -646,6 +646,7 @@ export default function Page() {
         ...recurringForm.item,
         title: input.title,
         memo: input.memo,
+        category: input.category,
         frequency: input.frequency,
         dayOfMonth: input.dayOfMonth,
         monthOfYear: input.monthOfYear,
@@ -765,7 +766,7 @@ export default function Page() {
         {mounted && !activeLog && (
           <button
             type="button"
-            onClick={() => setTodoQuickPickOpen(true)}
+            onClick={() => setTodoManageOpen(true)}
             aria-label="やるべきこと"
             className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
           >
@@ -822,7 +823,7 @@ export default function Page() {
                 disabled={!task.trim()}
                 className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                タスクを追加
+                開始
               </button>
             </div>
           )}
@@ -925,10 +926,6 @@ export default function Page() {
             onAddPast={() => setPastOpen(true)}
             onAddEvent={() => setEventOpen(true)}
             onListEvents={() => setEventListOpen(true)}
-            onManageTodos={() => {
-              setTodoManageOpen(true);
-              setMenuOpen(false);
-            }}
             onManageRecurring={() => {
               setRecurringManageOpen(true);
               setMenuOpen(false);
@@ -984,16 +981,9 @@ export default function Page() {
           onClose={() => setTodoManageOpen(false)}
           onAdd={() => setTodoForm({ mode: "add" })}
           onEdit={(todo) => setTodoForm({ mode: "edit", todo })}
-          onMoveUp={handleMoveTodoUp}
-          onMoveDown={handleMoveTodoDown}
-          onDeleteDone={handleDeleteDoneTodo}
-        />
-      )}
-      {todoQuickPickOpen && (
-        <TodoQuickPickModal
-          todos={todos}
-          onClose={() => setTodoQuickPickOpen(false)}
+          onReorder={handleReorderTodos}
           onPick={handleQuickPickTodo}
+          onDeleteDone={handleDeleteDoneTodo}
         />
       )}
       {todoForm && (

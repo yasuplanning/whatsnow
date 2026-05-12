@@ -284,10 +284,17 @@ function migrateTodoItem(raw: any): TodoItem {
   const createdAt = migrateIsoToJst(raw?.createdAt) ?? "";
   const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
   const doneAt = migrateIsoToJst(raw?.doneAt);
+  const title = typeof raw?.title === "string" ? raw.title : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(title, memo);
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
-    title: typeof raw?.title === "string" ? raw.title : "",
-    memo: typeof raw?.memo === "string" ? raw.memo : "",
+    title,
+    memo,
+    category,
     progress: typeof raw?.progress === "number" ? raw.progress : 0,
     status: raw?.status === "done" ? "done" : "open",
     deadline,
@@ -302,10 +309,17 @@ function migrateTodoItem(raw: any): TodoItem {
 function migrateRecurring(raw: any): RecurringTodo {
   const createdAt = migrateIsoToJst(raw?.createdAt) ?? "";
   const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const title = typeof raw?.title === "string" ? raw.title : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(title, memo);
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
-    title: typeof raw?.title === "string" ? raw.title : "",
-    memo: typeof raw?.memo === "string" ? raw.memo : "",
+    title,
+    memo,
+    category,
     frequency: raw?.frequency === "yearly" ? "yearly" : "monthly",
     dayOfMonth: typeof raw?.dayOfMonth === "number" ? raw.dayOfMonth : 1,
     monthOfYear: typeof raw?.monthOfYear === "number" ? raw.monthOfYear : null,
@@ -507,6 +521,42 @@ export function moveTodoDown(todos: TodoItem[], id: string): TodoItem[] {
   const idx = openIds.indexOf(id);
   if (idx === -1 || idx === openIds.length - 1) return todos;
   return swapTodosByIds(todos, id, openIds[idx + 1]);
+}
+
+export function reorderOpenTodos(
+  todos: TodoItem[],
+  orderedOpenIds: string[]
+): TodoItem[] {
+  const openById = new Map<string, TodoItem>();
+  for (const t of todos) {
+    if (t.status === "open") openById.set(t.id, t);
+  }
+  const reorderedOpen: TodoItem[] = [];
+  const used = new Set<string>();
+  for (const id of orderedOpenIds) {
+    const found = openById.get(id);
+    if (found && !used.has(id)) {
+      reorderedOpen.push(found);
+      used.add(id);
+    }
+  }
+  for (const t of todos) {
+    if (t.status === "open" && !used.has(t.id)) {
+      reorderedOpen.push(t);
+      used.add(t.id);
+    }
+  }
+  const result: TodoItem[] = [];
+  let openCursor = 0;
+  for (const t of todos) {
+    if (t.status === "open") {
+      result.push(reorderedOpen[openCursor]);
+      openCursor += 1;
+    } else {
+      result.push(t);
+    }
+  }
+  return result;
 }
 
 export function clearAllTodos(): void {
