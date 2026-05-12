@@ -3,7 +3,10 @@ import type {
   CountdownTimer,
   EventEntry,
   LogEntry,
+  PaymentCycle,
   RecurringTodo,
+  Subscription,
+  SubscriptionStatus,
   TodoItem,
 } from "./types";
 import { inferCategoryFromTitleAndMemo, normalizeCategory } from "./category";
@@ -16,6 +19,7 @@ const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
 const TODO_STORAGE_KEY = "whatsnow.todos.v1";
 const RECURRING_TODO_STORAGE_KEY = "whatsnow.recurringTodos.v1";
 const COUNTDOWN_STORAGE_KEY = "whatsnow.countdowns.v1";
+const SUBSCRIPTION_STORAGE_KEY = "whatsnow.subscriptions.v1";
 const PHOTO_STORAGE_KEY = "whatsnow.photos.v1";
 const BACKUP_KEY = "whatsnow.backup.preMigration.v1";
 
@@ -38,6 +42,7 @@ function ensureBackup(): void {
       countdowns: window.localStorage.getItem(COUNTDOWN_STORAGE_KEY),
       todos: window.localStorage.getItem(TODO_STORAGE_KEY),
       recurring: window.localStorage.getItem(RECURRING_TODO_STORAGE_KEY),
+      subscriptions: window.localStorage.getItem(SUBSCRIPTION_STORAGE_KEY),
     };
     const anyPresent =
       snapshot.logs ||
@@ -45,7 +50,8 @@ function ensureBackup(): void {
       snapshot.checkins ||
       snapshot.countdowns ||
       snapshot.todos ||
-      snapshot.recurring;
+      snapshot.recurring ||
+      snapshot.subscriptions;
     if (!anyPresent) return;
     window.localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshot));
   } catch {
@@ -133,6 +139,14 @@ export function getPhotoDataUrl(photoId: string | null | undefined): string | nu
   if (!photoId) return null;
   const map = readPhotoMap();
   return map[photoId] ?? null;
+}
+
+export function getAllPhotos(): Record<string, string> {
+  return readPhotoMap();
+}
+
+export function setAllPhotos(map: Record<string, string>): void {
+  writePhotoMap(map);
 }
 
 export function removePhoto(photoId: string | null | undefined): void {
@@ -303,6 +317,61 @@ function migrateTodoItem(raw: any): TodoItem {
     doneAt,
     recurringTodoId: raw?.recurringTodoId ?? null,
     recurringPeriodKey: raw?.recurringPeriodKey ?? null,
+    subscriptionId: raw?.subscriptionId ?? null,
+    subscriptionPeriodKey: raw?.subscriptionPeriodKey ?? null,
+  };
+}
+
+function migrateSubscription(raw: any): Subscription {
+  const createdAt = migrateIsoToJst(raw?.createdAt) ?? "";
+  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
+  const nextRenewalAt = migrateIsoToJst(raw?.nextRenewalAt) ?? "";
+  const contractStartedAt = migrateIsoToJst(raw?.contractStartedAt);
+  const serviceName =
+    typeof raw?.serviceName === "string" ? raw.serviceName : "";
+  const memo = typeof raw?.memo === "string" ? raw.memo : "";
+  const category =
+    raw?.category !== undefined
+      ? normalizeCategory(raw.category)
+      : inferCategoryFromTitleAndMemo(serviceName, memo);
+  const paymentCycle: PaymentCycle =
+    raw?.paymentCycle === "yearly" || raw?.paymentCycle === "other"
+      ? raw.paymentCycle
+      : "monthly";
+  const status: SubscriptionStatus =
+    raw?.status === "considering" ||
+    raw?.status === "scheduled_cancel" ||
+    raw?.status === "cancelled"
+      ? raw.status
+      : "active";
+  return {
+    id: typeof raw?.id === "string" ? raw.id : generateId(),
+    serviceName,
+    amount:
+      typeof raw?.amount === "number" && Number.isFinite(raw.amount)
+        ? Math.floor(raw.amount)
+        : 0,
+    paymentCycle,
+    customCycleMonths:
+      typeof raw?.customCycleMonths === "number" &&
+      Number.isFinite(raw.customCycleMonths)
+        ? raw.customCycleMonths
+        : null,
+    nextRenewalAt,
+    contractStartedAt,
+    paymentMethod:
+      typeof raw?.paymentMethod === "string" ? raw.paymentMethod : "",
+    cancelUrl: typeof raw?.cancelUrl === "string" ? raw.cancelUrl : "",
+    memo,
+    category,
+    status,
+    reviewEnabled: raw?.reviewEnabled === true,
+    reviewDaysBefore:
+      typeof raw?.reviewDaysBefore === "number"
+        ? Math.max(0, Math.floor(raw.reviewDaysBefore))
+        : 7,
+    createdAt,
+    updatedAt,
   };
 }
 
@@ -695,11 +764,85 @@ export function clearAllCountdownTimers(): void {
   }
 }
 
+export function getSubscriptions(): Subscription[] {
+  return loadAndMigrate<Subscription>(
+    SUBSCRIPTION_STORAGE_KEY,
+    migrateSubscription
+  );
+}
+
+export function saveSubscriptions(items: Subscription[]): void {
+  writeArray(SUBSCRIPTION_STORAGE_KEY, items);
+}
+
+export function addSubscription(
+  items: Subscription[],
+  item: Subscription
+): Subscription[] {
+  return [...items, item];
+}
+
+export function updateSubscription(
+  items: Subscription[],
+  item: Subscription
+): Subscription[] {
+  const idx = items.findIndex((s) => s.id === item.id);
+  if (idx === -1) return [...items, item];
+  const next = items.slice();
+  next[idx] = item;
+  return next;
+}
+
+export function deleteSubscription(
+  items: Subscription[],
+  id: string
+): Subscription[] {
+  return items.filter((s) => s.id !== id);
+}
+
+export function clearAllSubscriptions(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(SUBSCRIPTION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function clearAllPhotos(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(PHOTO_STORAGE_KEY);
   } catch {
     // ignore
+  }
+}
+
+export interface BackupSnapshot {
+  logs: LogEntry[];
+  events: EventEntry[];
+  checkins: CheckinEntry[];
+  todos: TodoItem[];
+  recurringTodos: RecurringTodo[];
+  countdowns: CountdownTimer[];
+  subscriptions: Subscription[];
+  lastActivityAt: string | null;
+  photos: Record<string, string>;
+}
+
+export function restoreAllData(snapshot: BackupSnapshot): void {
+  if (!isBrowser()) return;
+  saveLogs(snapshot.logs);
+  saveEvents(snapshot.events);
+  saveCheckins(snapshot.checkins);
+  saveTodos(snapshot.todos);
+  saveRecurringTodos(snapshot.recurringTodos);
+  saveCountdownTimers(snapshot.countdowns);
+  saveSubscriptions(snapshot.subscriptions);
+  setAllPhotos(snapshot.photos);
+  if (snapshot.lastActivityAt) {
+    saveLastActivityAt(snapshot.lastActivityAt);
+  } else {
+    clearLastActivityAt();
   }
 }

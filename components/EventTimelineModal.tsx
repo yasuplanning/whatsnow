@@ -8,7 +8,7 @@ import type {
   LogEntry,
   TodoItem,
 } from "@/lib/types";
-import { formatLocalDateKey } from "@/lib/csv";
+import { formatLocalDateKey } from "@/lib/time";
 import EventTimelineDay, {
   formatTimeHM,
   type TimelineItem,

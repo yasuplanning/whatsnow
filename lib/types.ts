@@ -94,4 +94,33 @@ export interface TodoItem {
   doneAt: string | null;
   recurringTodoId?: string | null;
   recurringPeriodKey?: string | null;
+  subscriptionId?: string | null;
+  subscriptionPeriodKey?: string | null;
+}
+
+export type PaymentCycle = "monthly" | "yearly" | "other";
+
+export type SubscriptionStatus =
+  | "active"
+  | "considering"
+  | "scheduled_cancel"
+  | "cancelled";
+
+export interface Subscription {
+  id: string;
+  serviceName: string;
+  amount: number;
+  paymentCycle: PaymentCycle;
+  customCycleMonths: number | null;
+  nextRenewalAt: string;
+  contractStartedAt: string | null;
+  paymentMethod: string;
+  cancelUrl: string;
+  memo: string;
+  category: Category;
+  status: SubscriptionStatus;
+  reviewEnabled: boolean;
+  reviewDaysBefore: number;
+  createdAt: string;
+  updatedAt: string;
 }

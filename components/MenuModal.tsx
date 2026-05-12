@@ -10,6 +10,7 @@ interface Props {
   onAddEvent: () => void;
   onListEvents: () => void;
   onManageRecurring: () => void;
+  onManageSubscriptions: () => void;
   onOpenCountdown: () => void;
   onDelete: () => void;
 }
@@ -22,6 +23,7 @@ export default function MenuModal({
   onAddEvent,
   onListEvents,
   onManageRecurring,
+  onManageSubscriptions,
   onOpenCountdown,
   onDelete,
 }: Props) {
@@ -58,6 +60,13 @@ export default function MenuModal({
         </button>
         <button
           type="button"
+          onClick={onManageSubscriptions}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          サブスク管理
+        </button>
+        <button
+          type="button"
           onClick={onOpenCountdown}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
@@ -75,7 +84,7 @@ export default function MenuModal({
           onClick={onExport}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          エクスポート
+          バックアップ
         </button>
         <button
           type="button"

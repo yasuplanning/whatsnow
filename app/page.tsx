@@ -7,11 +7,13 @@ import type {
   EventEntry,
   LogEntry,
   RecurringTodo,
+  Subscription,
   TodoItem,
 } from "@/lib/types";
 import {
   addCountdownTimer,
   addRecurringTodo,
+  addSubscription,
   addTodo,
   cancelCountdownTimer,
   clearAllCheckins,
@@ -19,16 +21,19 @@ import {
   clearAllEvents,
   clearAllLogs,
   clearAllRecurringTodos,
+  clearAllSubscriptions,
   clearAllTodos,
   clearLastActivityAt,
   completeCountdownTimer,
   completeTodo,
   deleteRecurringTodo,
+  deleteSubscription,
   deleteTodo,
   findActiveLog,
   generateId,
   getCountdownTimers,
   getRecurringTodos,
+  getSubscriptions,
   getTodoById,
   getTodos,
   loadCheckins,
@@ -44,15 +49,20 @@ import {
   saveLastActivityAt,
   saveLogs,
   saveRecurringTodos,
+  saveSubscriptions,
   saveTodos,
   updateRecurringTodo,
+  updateSubscription,
   updateTodo,
   upsertCheckin,
   upsertEvent,
   upsertLog,
 } from "@/lib/storage";
 import { generateRecurringTodosForNow } from "@/lib/recurring";
-import { downloadCsv, downloadJson, entriesForDate } from "@/lib/csv";
+import {
+  createReviewTodoManually,
+  generateSubscriptionReviewTodosForNow,
+} from "@/lib/subscriptionReview";
 import {
   ensureNotificationPermission,
   showNotification,
@@ -73,7 +83,7 @@ import CategorySelect from "@/components/CategorySelect";
 import EventTimelineModal from "@/components/EventTimelineModal";
 import EndModal from "@/components/EndModal";
 import MenuModal from "@/components/MenuModal";
-import ExportModal from "@/components/ExportModal";
+import BackupModal from "@/components/BackupModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import PastLogModal from "@/components/PastLogModal";
 import EventModal from "@/components/EventModal";
@@ -88,6 +98,10 @@ import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
 import CountdownFormModal from "@/components/CountdownFormModal";
 import CountdownCentralPanel from "@/components/CountdownCentralPanel";
 import CountdownMiniDock from "@/components/CountdownMiniDock";
+import SubscriptionManageModal from "@/components/SubscriptionManageModal";
+import SubscriptionFormModal, {
+  type SubmitInput as SubscriptionSubmitInput,
+} from "@/components/SubscriptionFormModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -104,6 +118,10 @@ type RecurringFormState =
   | { mode: "add" }
   | { mode: "edit"; item: RecurringTodo };
 
+type SubscriptionFormState =
+  | { mode: "add" }
+  | { mode: "edit"; item: Subscription };
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -117,7 +135,7 @@ export default function Page() {
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
@@ -135,6 +153,10 @@ export default function Page() {
   const [timers, setTimers] = useState<CountdownTimer[]>([]);
   const [countdownFormOpen, setCountdownFormOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [subscriptionManageOpen, setSubscriptionManageOpen] = useState(false);
+  const [subscriptionForm, setSubscriptionForm] =
+    useState<SubscriptionFormState | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
@@ -145,32 +167,51 @@ export default function Page() {
     [pendingTodoId, todos]
   );
 
-  useEffect(() => {
-    setMounted(true);
+  const reloadAllFromStorage = useCallback(() => {
     const loaded = loadLogs();
     setLogs(loaded);
     setEvents(loadEvents());
     setCheckins(loadCheckins());
     const loadedTodos = getTodos();
     const loadedRecurring = getRecurringTodos();
-    const additions = generateRecurringTodosForNow(
+    const loadedSubscriptions = getSubscriptions();
+    const now = new Date();
+    const recurringAdditions = generateRecurringTodosForNow(
       loadedRecurring,
       loadedTodos,
-      new Date()
+      now
+    );
+    const afterRecurring =
+      recurringAdditions.length > 0
+        ? [...loadedTodos, ...recurringAdditions]
+        : loadedTodos;
+    const subscriptionAdditions = generateSubscriptionReviewTodosForNow(
+      loadedSubscriptions,
+      afterRecurring,
+      now
     );
     const finalTodos =
-      additions.length > 0 ? [...loadedTodos, ...additions] : loadedTodos;
-    if (additions.length > 0) {
+      subscriptionAdditions.length > 0
+        ? [...afterRecurring, ...subscriptionAdditions]
+        : afterRecurring;
+    if (recurringAdditions.length > 0 || subscriptionAdditions.length > 0) {
       saveTodos(finalTodos);
     }
     setTodos(finalTodos);
     setRecurringTodos(loadedRecurring);
+    setSubscriptions(loadedSubscriptions);
     setTimers(getCountdownTimers());
     setLastActivityAt(loadLastActivityAt());
-    if (findActiveLog(loaded)) {
-      setPhase({ kind: "active" });
-    }
+    setPendingTodoId(null);
+    plannedEndNotifiedRef.current.clear();
+    inactivityNotifiedRef.current = null;
+    setPhase(findActiveLog(loaded) ? { kind: "active" } : { kind: "initial" });
   }, []);
+
+  useEffect(() => {
+    setMounted(true);
+    reloadAllFromStorage();
+  }, [reloadAllFromStorage]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -373,38 +414,6 @@ export default function Page() {
     }
   };
 
-  const handleExport = (dateKey: string, format: "csv" | "json") => {
-    const filtered = entriesForDate(
-      logs,
-      events,
-      checkins,
-      timers,
-      todos,
-      dateKey
-    );
-    if (format === "csv") {
-      downloadCsv(
-        dateKey,
-        filtered.tasks,
-        filtered.events,
-        filtered.checkins,
-        filtered.countdowns,
-        filtered.todoDones
-      );
-    } else {
-      downloadJson(
-        dateKey,
-        filtered.tasks,
-        filtered.events,
-        filtered.checkins,
-        filtered.countdowns,
-        filtered.todoDones
-      );
-    }
-    setExportOpen(false);
-    setMenuOpen(false);
-  };
-
   const handleDeleteAll = () => {
     clearAllLogs();
     clearAllEvents();
@@ -412,12 +421,14 @@ export default function Page() {
     clearAllTodos();
     clearAllRecurringTodos();
     clearAllCountdownTimers();
+    clearAllSubscriptions();
     clearLastActivityAt();
     setLogs([]);
     setEvents([]);
     setCheckins([]);
     setTodos([]);
     setRecurringTodos([]);
+    setSubscriptions([]);
     setTimers([]);
     setLastActivityAt(null);
     setPendingTodoId(null);
@@ -671,6 +682,124 @@ export default function Page() {
     setRecurringForm(null);
   };
 
+  const persistSubscriptions = useCallback((next: Subscription[]) => {
+    setSubscriptions(next);
+    saveSubscriptions(next);
+  }, []);
+
+  const applySubscriptionReview = useCallback(
+    (subsNext: Subscription[], todosNext: TodoItem[]) => {
+      const additions = generateSubscriptionReviewTodosForNow(
+        subsNext,
+        todosNext,
+        new Date()
+      );
+      if (additions.length === 0) {
+        setTodos(todosNext);
+        return;
+      }
+      const merged = [...todosNext, ...additions];
+      setTodos(merged);
+      saveTodos(merged);
+    },
+    []
+  );
+
+  const handleSubscriptionSubmit = (input: SubscriptionSubmitInput) => {
+    if (!subscriptionForm) return;
+    const nowIso = nowJstIso();
+    let nextSubs: Subscription[];
+    if (subscriptionForm.mode === "add") {
+      const entry: Subscription = {
+        id: generateId(),
+        serviceName: input.serviceName,
+        amount: input.amount,
+        paymentCycle: input.paymentCycle,
+        customCycleMonths: input.customCycleMonths,
+        nextRenewalAt: input.nextRenewalAt,
+        contractStartedAt: input.contractStartedAt,
+        paymentMethod: input.paymentMethod,
+        cancelUrl: input.cancelUrl,
+        memo: input.memo,
+        category: input.category,
+        status: input.status,
+        reviewEnabled: input.reviewEnabled,
+        reviewDaysBefore: input.reviewDaysBefore,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      nextSubs = addSubscription(subscriptions, entry);
+    } else {
+      const updated: Subscription = {
+        ...subscriptionForm.item,
+        serviceName: input.serviceName,
+        amount: input.amount,
+        paymentCycle: input.paymentCycle,
+        customCycleMonths: input.customCycleMonths,
+        nextRenewalAt: input.nextRenewalAt,
+        contractStartedAt: input.contractStartedAt,
+        paymentMethod: input.paymentMethod,
+        cancelUrl: input.cancelUrl,
+        memo: input.memo,
+        category: input.category,
+        status: input.status,
+        reviewEnabled: input.reviewEnabled,
+        reviewDaysBefore: input.reviewDaysBefore,
+        updatedAt: nowIso,
+      };
+      nextSubs = updateSubscription(subscriptions, updated);
+    }
+    persistSubscriptions(nextSubs);
+    setSubscriptionForm(null);
+    applySubscriptionReview(nextSubs, todos);
+  };
+
+  const handleSubscriptionDelete = () => {
+    if (!subscriptionForm || subscriptionForm.mode !== "edit") return;
+    const nextSubs = deleteSubscription(
+      subscriptions,
+      subscriptionForm.item.id
+    );
+    persistSubscriptions(nextSubs);
+    setSubscriptionForm(null);
+  };
+
+  const handleAdvanceSubscriptionRenewal = (id: string) => {
+    const sub = subscriptions.find((s) => s.id === id);
+    if (!sub) return;
+    const renewal = new Date(sub.nextRenewalAt);
+    if (Number.isNaN(renewal.getTime())) return;
+    let monthsToAdd: number;
+    if (sub.paymentCycle === "monthly") monthsToAdd = 1;
+    else if (sub.paymentCycle === "yearly") monthsToAdd = 12;
+    else if (sub.customCycleMonths && sub.customCycleMonths > 0)
+      monthsToAdd = sub.customCycleMonths;
+    else return;
+    const advanced = new Date(renewal.getTime());
+    advanced.setMonth(advanced.getMonth() + monthsToAdd);
+    const updated: Subscription = {
+      ...sub,
+      nextRenewalAt: toJstIso(advanced),
+      updatedAt: nowJstIso(),
+    };
+    const nextSubs = updateSubscription(subscriptions, updated);
+    persistSubscriptions(nextSubs);
+    applySubscriptionReview(nextSubs, todos);
+  };
+
+  const handleCreateSubscriptionReviewTodo = (sub: Subscription) => {
+    const added = createReviewTodoManually(sub, todos);
+    if (!added) {
+      if (typeof window !== "undefined") {
+        window.alert(
+          "この更新サイクルの見直しタスクは既に存在するか、対象外です。"
+        );
+      }
+      return;
+    }
+    persistTodos([...todos, added]);
+  };
+
   const handleCountdownSubmit = (input: {
     durationMinutes: number;
     title: string;
@@ -906,7 +1035,7 @@ export default function Page() {
         />
       )}
       {menuOpen &&
-        !exportOpen &&
+        !backupOpen &&
         !deleteOpen &&
         !pastOpen &&
         !eventOpen &&
@@ -914,11 +1043,12 @@ export default function Page() {
         !editOpen &&
         !todoManageOpen &&
         !recurringManageOpen &&
+        !subscriptionManageOpen &&
         !countdownFormOpen &&
         !timelineOpen && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
-            onExport={() => setExportOpen(true)}
+            onExport={() => setBackupOpen(true)}
             onTimeline={() => {
               setTimelineOpen(true);
               setMenuOpen(false);
@@ -930,6 +1060,10 @@ export default function Page() {
               setRecurringManageOpen(true);
               setMenuOpen(false);
             }}
+            onManageSubscriptions={() => {
+              setSubscriptionManageOpen(true);
+              setMenuOpen(false);
+            }}
             onOpenCountdown={() => {
               setCountdownFormOpen(true);
               setMenuOpen(false);
@@ -937,10 +1071,12 @@ export default function Page() {
             onDelete={() => setDeleteOpen(true)}
           />
         )}
-      {exportOpen && (
-        <ExportModal
-          onClose={() => setExportOpen(false)}
-          onExport={handleExport}
+      {backupOpen && (
+        <BackupModal
+          onClose={() => setBackupOpen(false)}
+          onImported={() => {
+            reloadAllFromStorage();
+          }}
         />
       )}
       {pastOpen && (
@@ -1020,6 +1156,30 @@ export default function Page() {
           onSubmit={handleRecurringSubmit}
           onDelete={
             recurringForm.mode === "edit" ? handleRecurringDelete : undefined
+          }
+        />
+      )}
+      {subscriptionManageOpen && !subscriptionForm && (
+        <SubscriptionManageModal
+          subscriptions={subscriptions}
+          onClose={() => setSubscriptionManageOpen(false)}
+          onAdd={() => setSubscriptionForm({ mode: "add" })}
+          onEdit={(item) => setSubscriptionForm({ mode: "edit", item })}
+          onAdvanceRenewal={handleAdvanceSubscriptionRenewal}
+          onCreateReviewTodo={handleCreateSubscriptionReviewTodo}
+        />
+      )}
+      {subscriptionForm && (
+        <SubscriptionFormModal
+          initial={
+            subscriptionForm.mode === "edit" ? subscriptionForm.item : null
+          }
+          onClose={() => setSubscriptionForm(null)}
+          onSubmit={handleSubscriptionSubmit}
+          onDelete={
+            subscriptionForm.mode === "edit"
+              ? handleSubscriptionDelete
+              : undefined
           }
         />
       )}

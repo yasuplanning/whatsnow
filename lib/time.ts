@@ -98,3 +98,7 @@ export function formatClock(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return "未定";
   return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+
+export function formatLocalDateKey(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
