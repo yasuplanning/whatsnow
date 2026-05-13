@@ -106,6 +106,7 @@ import SettingsModal from "@/components/SettingsModal";
 import CategoryManageModal from "@/components/CategoryManageModal";
 import CategoryFormModal from "@/components/CategoryFormModal";
 import AggregateModal from "@/components/AggregateModal";
+import SubcategoryAddModal from "@/components/SubcategoryAddModal";
 import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
 import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
 import CountdownFormModal from "@/components/CountdownFormModal";
@@ -147,7 +148,10 @@ export default function Page() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
   const [task, setTask] = useState<string>("");
-  const [taskCategory, setTaskCategory] = useState<Category>("その他");
+  const [taskCategory, setTaskCategory] = useState<Category>(() => {
+    const defaults = getDefaultCategories();
+    return defaults[0]?.name ?? "その他";
+  });
   const [taskSubcategory, setTaskSubcategory] = useState<string | null>(null);
   const [taskCategoryDirty, setTaskCategoryDirty] = useState(false);
   const [pendingTodoIds, setPendingTodoIds] = useState<string[]>([]);
@@ -187,6 +191,9 @@ export default function Page() {
   const [categoryForm, setCategoryForm] = useState<CategoryFormState | null>(
     null
   );
+  const [subcategoryAddTarget, setSubcategoryAddTarget] = useState<
+    string | null
+  >(null);
   const [subscriptionManageOpen, setSubscriptionManageOpen] = useState(false);
   const [subscriptionForm, setSubscriptionForm] =
     useState<SubscriptionFormState | null>(null);
@@ -393,6 +400,22 @@ export default function Page() {
     saveCategories(next);
   }, []);
 
+  const handleRequestAddSubcategory = (categoryName: string) => {
+    setSubcategoryAddTarget(categoryName);
+  };
+
+  const handleAddSubcategoryConfirm = (value: string) => {
+    const target = subcategoryAddTarget;
+    if (!target) return;
+    const next = categories.map((c) =>
+      c.name === target && !c.subcategories.includes(value)
+        ? { ...c, subcategories: [...c.subcategories, value] }
+        : c
+    );
+    persistCategories(next);
+    setSubcategoryAddTarget(null);
+  };
+
   const handleCategorySubmit = (input: {
     name: string;
     color: string;
@@ -546,7 +569,7 @@ export default function Page() {
     };
     persist(upsertLog(logs, entry));
     setTask("");
-    setTaskCategory("その他");
+    setTaskCategory(categories[0]?.name ?? "その他");
     setTaskSubcategory(null);
     setTaskCategoryDirty(false);
     setPendingTodoIds([]);
@@ -1506,6 +1529,17 @@ export default function Page() {
           }
         />
       )}
+      {subcategoryAddTarget && (
+        <SubcategoryAddModal
+          categoryName={subcategoryAddTarget}
+          existingSubcategories={
+            categories.find((c) => c.name === subcategoryAddTarget)
+              ?.subcategories ?? []
+          }
+          onClose={() => setSubcategoryAddTarget(null)}
+          onAdd={handleAddSubcategoryConfirm}
+        />
+      )}
       {backupOpen && (
         <BackupModal
           onClose={() => setBackupOpen(false)}
@@ -1519,6 +1553,7 @@ export default function Page() {
           categories={categories}
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {eventOpen && (
@@ -1526,6 +1561,7 @@ export default function Page() {
           categories={categories}
           onClose={() => setEventOpen(false)}
           onConfirm={handleAddEvent}
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {eventListOpen && (
@@ -1547,6 +1583,7 @@ export default function Page() {
           log={activeLog}
           onClose={() => setEditOpen(false)}
           onConfirm={handleEditActive}
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {todoManageOpen && !todoForm && (
@@ -1570,6 +1607,7 @@ export default function Page() {
             todoForm.mode === "edit" ? handleTodoComplete : undefined
           }
           onDelete={todoForm.mode === "edit" ? handleTodoDelete : undefined}
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {todoFollowup && (
@@ -1598,6 +1636,7 @@ export default function Page() {
           onDelete={
             recurringForm.mode === "edit" ? handleRecurringDelete : undefined
           }
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {subscriptionManageOpen && !subscriptionForm && (
@@ -1623,6 +1662,7 @@ export default function Page() {
               ? handleSubscriptionDelete
               : undefined
           }
+          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {deleteOpen && (
@@ -1678,6 +1718,7 @@ export default function Page() {
               categories={categories}
               onClose={() => setEditPastLogId(null)}
               onConfirm={handleEditPastTaskConfirm}
+              onAddSubcategory={handleRequestAddSubcategory}
             />
           );
         })()}

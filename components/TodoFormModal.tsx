@@ -36,6 +36,7 @@ interface Props {
   }) => void;
   onComplete?: () => void;
   onDelete?: () => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 function minutesToDraft(minutesBefore: number): {
@@ -80,12 +81,13 @@ export default function TodoFormModal({
   onSubmit,
   onComplete,
   onDelete,
+  onAddSubcategory,
 }: Props) {
   const isEdit = initial !== null;
   const [title, setTitle] = useState<string>(initial?.title ?? "");
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
   const [category, setCategory] = useState<Category>(
-    initial?.category ?? "その他"
+    initial?.category ?? categories[0]?.name ?? "その他"
   );
   const [subcategory, setSubcategory] = useState<string | null>(
     initial?.subcategory ?? null
@@ -249,6 +251,7 @@ export default function TodoFormModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">

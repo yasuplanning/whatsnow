@@ -21,6 +21,7 @@ interface Props {
   onClose: () => void;
   onSubmit: (input: SubmitInput) => void;
   onDelete?: () => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export interface SubmitInput {
@@ -85,6 +86,7 @@ export default function SubscriptionFormModal({
   onClose,
   onSubmit,
   onDelete,
+  onAddSubcategory,
 }: Props) {
   const isEdit = initial !== null;
   const [serviceName, setServiceName] = useState<string>(
@@ -117,7 +119,7 @@ export default function SubscriptionFormModal({
     initial?.reviewDaysBefore ?? 7
   );
   const [category, setCategory] = useState<Category>(
-    initial?.category ?? "その他"
+    initial?.category ?? categories[0]?.name ?? "その他"
   );
   const [subcategory, setSubcategory] = useState<string | null>(
     initial?.subcategory ?? null
@@ -306,6 +308,7 @@ export default function SubscriptionFormModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">

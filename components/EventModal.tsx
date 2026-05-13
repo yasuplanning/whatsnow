@@ -23,19 +23,23 @@ interface Props {
     category: Category;
     subcategory: string | null;
   }) => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export default function EventModal({
   categories,
   onClose,
   onConfirm,
+  onAddSubcategory,
 }: Props) {
   const [content, setContent] = useState<string>("");
   const [timestamp, setTimestamp] = useState<string>(toDatetimeLocal(new Date()));
   const [memo, setMemo] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoSummary, setPhotoSummary] = useState<string>("");
-  const [category, setCategory] = useState<Category>("その他");
+  const [category, setCategory] = useState<Category>(
+    categories[0]?.name ?? "その他"
+  );
   const [subcategory, setSubcategory] = useState<string | null>(null);
   const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
@@ -116,6 +120,7 @@ export default function EventModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">

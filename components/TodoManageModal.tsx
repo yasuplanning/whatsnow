@@ -260,9 +260,13 @@ export default function TodoManageModal({
                     className="rounded-xl bg-slate-900/60 p-3 text-sm"
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="break-words font-semibold text-slate-200 line-through">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(t)}
+                        className="flex-1 break-words text-left font-semibold text-slate-200 line-through hover:text-slate-100"
+                      >
                         {t.title}
-                      </span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => {

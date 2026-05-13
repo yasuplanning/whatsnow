@@ -21,12 +21,14 @@ interface Props {
     category: Category;
     subcategory: string | null;
   }) => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export default function PastLogModal({
   categories,
   onClose,
   onConfirm,
+  onAddSubcategory,
 }: Props) {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -34,7 +36,9 @@ export default function PastLogModal({
   const [start, setStart] = useState<string>(toDatetimeLocal(oneHourAgo));
   const [end, setEnd] = useState<string>(toDatetimeLocal(now));
   const [memo, setMemo] = useState<string>("");
-  const [category, setCategory] = useState<Category>("その他");
+  const [category, setCategory] = useState<Category>(
+    categories[0]?.name ?? "その他"
+  );
   const [subcategory, setSubcategory] = useState<string | null>(null);
   const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
@@ -102,6 +106,7 @@ export default function PastLogModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="grid grid-cols-1 gap-3">

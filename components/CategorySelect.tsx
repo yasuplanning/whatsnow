@@ -9,6 +9,7 @@ interface Props {
   onChange: (next: Category) => void;
   subcategoryValue?: string | null;
   onSubcategoryChange?: (next: string | null) => void;
+  onAddSubcategory?: (categoryName: string) => void;
   label?: string;
 }
 
@@ -18,6 +19,7 @@ export default function CategorySelect({
   onChange,
   subcategoryValue,
   onSubcategoryChange,
+  onAddSubcategory,
   label = "カテゴリ",
 }: Props) {
   const def = useMemo(
@@ -44,20 +46,33 @@ export default function CategorySelect({
         ))}
       </select>
       {hasSubcategories && onSubcategoryChange && (
-        <select
-          value={subcategoryValue ?? ""}
-          onChange={(e) =>
-            onSubcategoryChange(e.target.value === "" ? null : e.target.value)
-          }
-          className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
-        >
-          <option value="">サブカテゴリなし</option>
-          {def!.subcategories.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={subcategoryValue ?? ""}
+            onChange={(e) =>
+              onSubcategoryChange(e.target.value === "" ? null : e.target.value)
+            }
+            className="flex-1 rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+          >
+            <option value="">サブカテゴリなし</option>
+            {def!.subcategories.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          {onAddSubcategory && (
+            <button
+              type="button"
+              onClick={() => onAddSubcategory(value)}
+              aria-label="サブカテゴリを追加"
+              title="サブカテゴリを追加"
+              className="shrink-0 rounded-xl bg-slate-700 px-3 py-3 text-base font-bold text-white hover:bg-slate-600"
+            >
+              ＋
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

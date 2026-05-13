@@ -23,6 +23,7 @@ interface Props {
     category: Category;
     subcategory: string | null;
   }) => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export default function EditActiveTaskModal({
@@ -30,6 +31,7 @@ export default function EditActiveTaskModal({
   log,
   onClose,
   onConfirm,
+  onAddSubcategory,
 }: Props) {
   const initialStartDate = new Date(log.startAt);
   const fallbackPlanned = new Date(initialStartDate.getTime() + 60 * 60 * 1000);
@@ -106,6 +108,7 @@ export default function EditActiveTaskModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">

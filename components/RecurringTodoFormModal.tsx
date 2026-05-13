@@ -26,6 +26,7 @@ interface Props {
     subcategory: string | null;
   }) => void;
   onDelete?: () => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -38,12 +39,13 @@ export default function RecurringTodoFormModal({
   onClose,
   onSubmit,
   onDelete,
+  onAddSubcategory,
 }: Props) {
   const isEdit = initial !== null;
   const [title, setTitle] = useState<string>(initial?.title ?? "");
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
   const [category, setCategory] = useState<Category>(
-    initial?.category ?? "その他"
+    initial?.category ?? categories[0]?.name ?? "その他"
   );
   const [subcategory, setSubcategory] = useState<string | null>(
     initial?.subcategory ?? null
@@ -139,6 +141,7 @@ export default function RecurringTodoFormModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">

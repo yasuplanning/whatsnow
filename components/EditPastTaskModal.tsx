@@ -35,6 +35,7 @@ interface Props {
     todoIds: string[];
     todoAllocations: TodoAllocation[];
   }) => void;
+  onAddSubcategory?: (categoryName: string) => void;
 }
 
 interface RatioRow {
@@ -49,6 +50,7 @@ export default function EditPastTaskModal({
   categories,
   onClose,
   onConfirm,
+  onAddSubcategory,
 }: Props) {
   const initialStart = new Date(log.startAt);
   const initialEnd = log.endAt ? new Date(log.endAt) : new Date();
@@ -238,6 +240,7 @@ export default function EditPastTaskModal({
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
+          onAddSubcategory={onAddSubcategory}
         />
 
         <div className="space-y-2">
