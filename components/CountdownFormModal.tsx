@@ -13,6 +13,16 @@ interface Props {
   }) => void;
 }
 
+function computeEndOfTodayMinutes(): number {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(23, 59, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+  return Math.max(1, Math.ceil((target.getTime() - now.getTime()) / 60000));
+}
+
 export default function CountdownFormModal({
   activeCount,
   onClose,
@@ -20,6 +30,7 @@ export default function CountdownFormModal({
 }: Props) {
   const reachedLimit = activeCount >= 3;
   const [minutes, setMinutes] = useState<string>("5");
+  const [endOfToday, setEndOfToday] = useState<boolean>(false);
   const [title, setTitle] = useState<string>("");
   const [memo, setMemo] = useState<string>("");
   const [error, setError] = useState<string>(
@@ -36,12 +47,18 @@ export default function CountdownFormModal({
       setError("タイトルを入力してください。");
       return;
     }
-    const m = Math.floor(Number(minutes));
-    if (!Number.isFinite(m) || m < 1 || m > 180) {
-      setError("1〜180分で指定してください。");
-      return;
+    let durationMinutes: number;
+    if (endOfToday) {
+      durationMinutes = computeEndOfTodayMinutes();
+    } else {
+      const m = Math.floor(Number(minutes));
+      if (!Number.isFinite(m) || m < 1 || m > 180) {
+        setError("1〜180分で指定してください。");
+        return;
+      }
+      durationMinutes = m;
     }
-    onSubmit({ durationMinutes: m, title: trimmed, memo });
+    onSubmit({ durationMinutes, title: trimmed, memo });
   };
 
   return (
@@ -56,10 +73,22 @@ export default function CountdownFormModal({
             step={1}
             inputMode="numeric"
             value={minutes}
+            disabled={endOfToday}
             onChange={(e) => setMinutes(e.target.value)}
-            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-2xl tabular-nums text-white"
+            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-2xl tabular-nums text-white disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
           />
-          <p className="text-xs text-slate-400">1〜180分</p>
+          <p className={`text-xs ${endOfToday ? "text-slate-500" : "text-slate-400"}`}>
+            1〜180分
+          </p>
+          <label className="flex items-center gap-2 pt-1 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={endOfToday}
+              onChange={(e) => setEndOfToday(e.target.checked)}
+              className="h-5 w-5"
+            />
+            <span>今日中（本日 23:59 期限）</span>
+          </label>
         </div>
 
         <div className="space-y-2">
