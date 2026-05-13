@@ -63,7 +63,7 @@ export default function MenuModal({
           onClick={onManageRecurring}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          毎月・毎年やるべきこと
+          毎月・毎年ToDo
         </button>
         <button
           type="button"

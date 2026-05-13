@@ -112,6 +112,8 @@ export function generateRecurringTodosForNow(
       doneAt: null,
       recurringTodoId: template.id,
       recurringPeriodKey: info.periodKey,
+      important: false,
+      alerts: [],
     };
     additions.push(entry);
     seen.add(key);

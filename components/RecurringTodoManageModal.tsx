@@ -27,7 +27,7 @@ export default function RecurringTodoManageModal({
   );
 
   return (
-    <Modal title="毎月・毎年やるべきこと" onClose={onClose}>
+    <Modal title="毎月・毎年ToDo" onClose={onClose}>
       <div className="space-y-4">
         <button
           type="button"

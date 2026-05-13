@@ -27,7 +27,7 @@ export default function TodoFollowupModal({
   const [memo, setMemo] = useState<string>(todo.memo);
 
   return (
-    <Modal title="やるべきこと" onClose={onClose}>
+    <Modal title="ToDo" onClose={onClose}>
       <div className="space-y-4">
         <div className="rounded-xl bg-slate-900 p-3">
           <p className="break-words text-base font-semibold">{todo.title}</p>
@@ -35,7 +35,7 @@ export default function TodoFollowupModal({
 
         {mode === "ask" && (
           <>
-            <p className="text-base">この「やるべきこと」も完了にしますか？</p>
+            <p className="text-base">この「ToDo」も完了にしますか？</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -80,7 +80,7 @@ export default function TodoFollowupModal({
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 rows={3}
-                placeholder="やるべきこと自体の継続メモ"
+                placeholder="ToDo自体の継続メモ"
                 className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
               />
             </div>

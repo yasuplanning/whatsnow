@@ -187,6 +187,29 @@ function migrateLogEntry(raw: any): LogEntry {
   } else {
     todoIds = [];
   }
+  const deductionMinutes =
+    typeof raw?.deductionMinutes === "number" &&
+    Number.isFinite(raw.deductionMinutes)
+      ? Math.max(0, Math.floor(raw.deductionMinutes))
+      : 0;
+  const rawAllocations = Array.isArray(raw?.todoAllocations)
+    ? raw.todoAllocations
+    : [];
+  const todoAllocations = rawAllocations
+    .map((a: any) => {
+      const aTodoId = typeof a?.todoId === "string" ? a.todoId : null;
+      const ratio =
+        typeof a?.ratio === "number" && Number.isFinite(a.ratio)
+          ? Math.max(0, Math.floor(a.ratio))
+          : null;
+      if (!aTodoId || ratio === null) return null;
+      if (!todoIds.includes(aTodoId)) return null;
+      return { todoId: aTodoId, ratio };
+    })
+    .filter(
+      (a: { todoId: string; ratio: number } | null): a is { todoId: string; ratio: number } =>
+        a !== null
+    );
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     type: "task",
@@ -202,6 +225,8 @@ function migrateLogEntry(raw: any): LogEntry {
     updatedAt,
     todoId,
     todoIds,
+    deductionMinutes,
+    todoAllocations,
   };
 }
 
@@ -317,6 +342,22 @@ function migrateTodoItem(raw: any): TodoItem {
     raw?.category !== undefined
       ? normalizeCategory(raw.category)
       : inferCategoryFromTitleAndMemo(title, memo);
+  const rawAlerts = Array.isArray(raw?.alerts) ? raw.alerts : [];
+  const alerts = rawAlerts
+    .map((a: any) => {
+      const minutesBefore =
+        typeof a?.minutesBefore === "number" && Number.isFinite(a.minutesBefore)
+          ? Math.max(0, Math.floor(a.minutesBefore))
+          : null;
+      if (minutesBefore === null) return null;
+      return {
+        id: typeof a?.id === "string" ? a.id : generateId(),
+        minutesBefore,
+        notified: a?.notified === true,
+      };
+    })
+    .filter((a: any): a is NonNullable<typeof a> => a !== null)
+    .slice(0, 3);
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     title,
@@ -332,6 +373,8 @@ function migrateTodoItem(raw: any): TodoItem {
     recurringPeriodKey: raw?.recurringPeriodKey ?? null,
     subscriptionId: raw?.subscriptionId ?? null,
     subscriptionPeriodKey: raw?.subscriptionPeriodKey ?? null,
+    important: raw?.important === true,
+    alerts,
   };
 }
 

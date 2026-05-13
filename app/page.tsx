@@ -8,6 +8,8 @@ import type {
   LogEntry,
   RecurringTodo,
   Subscription,
+  TodoAlert,
+  TodoAllocation,
   TodoItem,
 } from "@/lib/types";
 import {
@@ -74,6 +76,7 @@ import {
   nowJstIso,
   toJstIso,
 } from "@/lib/time";
+import { normalizeAllocations } from "@/lib/allocation";
 import {
   CATEGORY_COLOR,
   inferCategoryFromTitleAndMemo,
@@ -93,6 +96,7 @@ import EditActiveTaskModal from "@/components/EditActiveTaskModal";
 import TodoManageModal from "@/components/TodoManageModal";
 import TodoFormModal from "@/components/TodoFormModal";
 import TodoFollowupModal from "@/components/TodoFollowupModal";
+import EditPastTaskModal from "@/components/EditPastTaskModal";
 import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
 import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
 import CountdownFormModal from "@/components/CountdownFormModal";
@@ -158,6 +162,7 @@ export default function Page() {
   const [timers, setTimers] = useState<CountdownTimer[]>([]);
   const [countdownFormOpen, setCountdownFormOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [editPastLogId, setEditPastLogId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [subscriptionManageOpen, setSubscriptionManageOpen] = useState(false);
   const [subscriptionForm, setSubscriptionForm] =
@@ -292,6 +297,43 @@ export default function Page() {
     }
   }, [now, timers]);
 
+  useEffect(() => {
+    type Hit = { todoId: string; alertId: string; title: string };
+    const hits: Hit[] = [];
+    for (const t of todos) {
+      if (!t.important || t.status !== "open" || !t.deadline) continue;
+      const deadlineMs = new Date(t.deadline).getTime();
+      if (Number.isNaN(deadlineMs)) continue;
+      for (const a of t.alerts) {
+        if (a.notified) continue;
+        const fireAt = deadlineMs - a.minutesBefore * 60 * 1000;
+        if (now >= fireAt) {
+          hits.push({ todoId: t.id, alertId: a.id, title: t.title });
+        }
+      }
+    }
+    if (hits.length === 0) return;
+    const nowIso = nowJstIso();
+    const next = todos.map((t) => {
+      const todoHits = hits.filter((h) => h.todoId === t.id);
+      if (todoHits.length === 0) return t;
+      return {
+        ...t,
+        alerts: t.alerts.map((a) =>
+          todoHits.some((h) => h.alertId === a.id)
+            ? { ...a, notified: true }
+            : a
+        ),
+        updatedAt: nowIso,
+      };
+    });
+    setTodos(next);
+    saveTodos(next);
+    for (const h of hits) {
+      showNotification("重要なToDo", `「${h.title}」の期限が近づいています。`);
+    }
+  }, [now, todos]);
+
   const persist = useCallback((next: LogEntry[]) => {
     setLogs(next);
     saveLogs(next);
@@ -356,6 +398,8 @@ export default function Page() {
       updatedAt: nowIso,
       todoId: pendingTodoIds[0] ?? null,
       todoIds: [...pendingTodoIds],
+      deductionMinutes: 0,
+      todoAllocations: normalizeAllocations(pendingTodoIds, []),
     };
     persist(upsertLog(logs, entry));
     setTask("");
@@ -364,6 +408,40 @@ export default function Page() {
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
+  };
+
+  const handleEditPastTaskConfirm = (input: {
+    startAt: Date;
+    endAt: Date;
+    deductionMinutes: number;
+    memo: string;
+    todoAllocations: TodoAllocation[];
+  }) => {
+    if (!editPastLogId) return;
+    const target = logs.find((l) => l.id === editPastLogId);
+    if (!target) {
+      setEditPastLogId(null);
+      return;
+    }
+    const nowIso = nowJstIso();
+    const startAtIso = toJstIso(input.startAt);
+    const endAtIso = toJstIso(input.endAt);
+    const normalized = normalizeAllocations(
+      target.todoIds,
+      input.todoAllocations
+    );
+    const updated: LogEntry = {
+      ...target,
+      startAt: startAtIso,
+      endAt: endAtIso,
+      memo: input.memo,
+      deductionMinutes: input.deductionMinutes,
+      todoAllocations: normalized,
+      durationMinutes: diffMinutes(startAtIso, endAtIso),
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
+    setEditPastLogId(null);
   };
 
   const handleEditActive = (input: {
@@ -473,6 +551,8 @@ export default function Page() {
       updatedAt: nowIso,
       todoId: null,
       todoIds: [],
+      deductionMinutes: 0,
+      todoAllocations: [],
     };
     persist(upsertLog(logs, entry));
     setPastOpen(false);
@@ -562,10 +642,12 @@ export default function Page() {
     if (!activeLog) return;
     if (activeLog.todoIds.includes(todoId)) return;
     const nowIso = nowJstIso();
+    const nextIds = [...activeLog.todoIds, todoId];
     const updated: LogEntry = {
       ...activeLog,
       todoId: activeLog.todoId ?? todoId,
-      todoIds: [...activeLog.todoIds, todoId],
+      todoIds: nextIds,
+      todoAllocations: normalizeAllocations(nextIds, activeLog.todoAllocations),
       updatedAt: nowIso,
     };
     persist(upsertLog(logs, updated));
@@ -581,6 +663,10 @@ export default function Page() {
       todoId:
         activeLog.todoId === todoId ? remaining[0] ?? null : activeLog.todoId,
       todoIds: remaining,
+      todoAllocations: normalizeAllocations(
+        remaining,
+        activeLog.todoAllocations
+      ),
       updatedAt: nowIso,
     };
     persist(upsertLog(logs, updated));
@@ -596,6 +682,8 @@ export default function Page() {
     progress: number;
     deadline: Date | null;
     category: Category;
+    important: boolean;
+    alerts: TodoAlert[];
   }) => {
     const nowIso = nowJstIso();
     if (!todoForm) return;
@@ -611,9 +699,20 @@ export default function Page() {
         createdAt: nowIso,
         updatedAt: nowIso,
         doneAt: null,
+        important: input.important,
+        alerts: input.alerts,
       };
       persistTodos(addTodo(todos, entry));
     } else {
+      const prevAlertsById = new Map(
+        todoForm.todo.alerts.map((a) => [a.id, a])
+      );
+      const mergedAlerts = input.alerts.map((a) => {
+        const prev = prevAlertsById.get(a.id);
+        if (!prev) return a;
+        const sameMinutes = prev.minutesBefore === a.minutesBefore;
+        return sameMinutes ? { ...a, notified: prev.notified } : a;
+      });
       const updated: TodoItem = {
         ...todoForm.todo,
         title: input.title,
@@ -622,6 +721,8 @@ export default function Page() {
         progress: input.progress,
         deadline: input.deadline ? toJstIso(input.deadline) : null,
         updatedAt: nowIso,
+        important: input.important,
+        alerts: mergedAlerts,
       };
       persistTodos(updateTodo(todos, updated));
     }
@@ -642,26 +743,38 @@ export default function Page() {
     if (!todoForm || todoForm.mode !== "edit") return;
     const deletedId = todoForm.todo.id;
     setPendingTodoIds((prev) => prev.filter((id) => id !== deletedId));
-    if (activeLog && activeLog.todoIds.includes(deletedId)) {
-      const nowIso = nowJstIso();
-      const remaining = activeLog.todoIds.filter((id) => id !== deletedId);
-      persist(
-        upsertLog(logs, {
-          ...activeLog,
-          todoId:
-            activeLog.todoId === deletedId
-              ? remaining[0] ?? null
-              : activeLog.todoId,
-          todoIds: remaining,
-          updatedAt: nowIso,
-        })
-      );
-    }
+    const nowIso = nowJstIso();
+    const nextLogs = logs.map((log) => {
+      if (!log.todoIds.includes(deletedId)) return log;
+      const remaining = log.todoIds.filter((id) => id !== deletedId);
+      return {
+        ...log,
+        todoId:
+          log.todoId === deletedId ? remaining[0] ?? null : log.todoId,
+        todoIds: remaining,
+        todoAllocations: normalizeAllocations(remaining, log.todoAllocations),
+        updatedAt: nowIso,
+      };
+    });
+    persist(nextLogs);
     persistTodos(deleteTodo(todos, deletedId));
     setTodoForm(null);
   };
 
   const handleDeleteDoneTodo = (id: string) => {
+    const nowIso = nowJstIso();
+    const nextLogs = logs.map((log) => {
+      if (!log.todoIds.includes(id)) return log;
+      const remaining = log.todoIds.filter((x) => x !== id);
+      return {
+        ...log,
+        todoId: log.todoId === id ? remaining[0] ?? null : log.todoId,
+        todoIds: remaining,
+        todoAllocations: normalizeAllocations(remaining, log.todoAllocations),
+        updatedAt: nowIso,
+      };
+    });
+    persist(nextLogs);
     persistTodos(deleteTodo(todos, id));
   };
 
@@ -968,7 +1081,7 @@ export default function Page() {
           <button
             type="button"
             onClick={() => setTodoManageOpen(true)}
-            aria-label="やるべきこと"
+            aria-label="ToDo"
             className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
           >
             <TodoIcon className="h-5 w-5" />
@@ -992,7 +1105,7 @@ export default function Page() {
               {pendingTodos.length > 0 && (
                 <div className="space-y-2 rounded-xl bg-sky-900/40 px-3 py-2 text-sm">
                   <p className="text-sky-300">
-                    やるべきこと（{pendingTodos.length}件）
+                    ToDo（{pendingTodos.length}件）
                   </p>
                   <ul className="space-y-1">
                     {pendingTodos.map((t) => (
@@ -1067,7 +1180,7 @@ export default function Page() {
                       className="flex items-center justify-between gap-2"
                     >
                       <span className="break-words">
-                        やるべきこと: {t.title}
+                        ToDo: {t.title}
                       </span>
                       <button
                         type="button"
@@ -1325,8 +1438,22 @@ export default function Page() {
           countdowns={timers}
           todos={todos}
           onClose={() => setTimelineOpen(false)}
+          onEditTask={(log) => setEditPastLogId(log.id)}
         />
       )}
+      {editPastLogId &&
+        (() => {
+          const target = logs.find((l) => l.id === editPastLogId);
+          if (!target) return null;
+          return (
+            <EditPastTaskModal
+              log={target}
+              todos={todos}
+              onClose={() => setEditPastLogId(null)}
+              onConfirm={handleEditPastTaskConfirm}
+            />
+          );
+        })()}
     </main>
   );
 }

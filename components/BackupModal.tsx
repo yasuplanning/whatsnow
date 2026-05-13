@@ -31,7 +31,7 @@ export default function BackupModal({ onClose, onImported }: Props) {
       setMessage(
         `バックアップを作成しました: ${result.filename}\n` +
           `タスク${c.logs}件 / イベント${c.events}件 / メモ${c.checkins}件 / ` +
-          `やるべきこと${c.todos}件 / 繰り返し${c.recurringTodos}件 / ` +
+          `ToDo${c.todos}件 / 繰り返し${c.recurringTodos}件 / ` +
           `タイマー${c.countdowns}件 / サブスク${c.subscriptions}件 / 画像${c.photos}件`
       );
     } catch (e) {
@@ -69,7 +69,7 @@ export default function BackupModal({ onClose, onImported }: Props) {
       setMessage(
         `インポートしました（${preview.exportedAt} のバックアップ）\n` +
           `タスク${c.logs}件 / イベント${c.events}件 / メモ${c.checkins}件 / ` +
-          `やるべきこと${c.todos}件 / 繰り返し${c.recurringTodos}件 / ` +
+          `ToDo${c.todos}件 / 繰り返し${c.recurringTodos}件 / ` +
           `タイマー${c.countdowns}件 / サブスク${c.subscriptions}件 / 画像${c.photos}件`
       );
       onImported();
@@ -84,7 +84,7 @@ export default function BackupModal({ onClose, onImported }: Props) {
     <Modal title="バックアップ" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-slate-300">
-          全データ（タスク・イベント・メモ・やるべきこと・繰り返し・タイマー・サブスク・画像）を
+          全データ（タスク・イベント・メモ・ToDo・繰り返し・タイマー・サブスク・画像）を
           ZIP ファイルとして書き出し、または ZIP から復元します。
         </p>
 

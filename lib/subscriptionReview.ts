@@ -29,6 +29,8 @@ function buildReviewTodo(
     recurringPeriodKey: null,
     subscriptionId: sub.id,
     subscriptionPeriodKey: periodKey,
+    important: false,
+    alerts: [],
   };
 }
 

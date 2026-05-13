@@ -4,6 +4,11 @@ export type EntryType = "task" | "event" | "checkin";
 
 export type LogStatus = "active" | "completed";
 
+export interface TodoAllocation {
+  todoId: string;
+  ratio: number;
+}
+
 export interface LogEntry {
   id: string;
   type: "task";
@@ -19,6 +24,8 @@ export interface LogEntry {
   updatedAt: string;
   todoId?: string | null;
   todoIds: string[];
+  deductionMinutes: number;
+  todoAllocations: TodoAllocation[];
 }
 
 export interface EventEntry {
@@ -82,6 +89,12 @@ export interface RecurringTodo {
 
 export type TodoStatus = "open" | "done";
 
+export interface TodoAlert {
+  id: string;
+  minutesBefore: number;
+  notified: boolean;
+}
+
 export interface TodoItem {
   id: string;
   title: string;
@@ -97,6 +110,8 @@ export interface TodoItem {
   recurringPeriodKey?: string | null;
   subscriptionId?: string | null;
   subscriptionPeriodKey?: string | null;
+  important: boolean;
+  alerts: TodoAlert[];
 }
 
 export type PaymentCycle = "monthly" | "yearly" | "other";

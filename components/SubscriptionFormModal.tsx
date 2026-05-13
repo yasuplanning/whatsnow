@@ -321,7 +321,7 @@ export default function SubscriptionFormModal({
               className="h-5 w-5"
             />
             <span className="text-base">
-              更新前に見直し（自動で「やるべきこと」に追加）
+              更新前に見直し（自動で「ToDo」に追加）
             </span>
           </label>
           {reviewEnabled && (

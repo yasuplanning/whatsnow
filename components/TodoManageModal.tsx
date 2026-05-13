@@ -136,7 +136,7 @@ export default function TodoManageModal({
   };
 
   return (
-    <Modal title="やるべきこと" onClose={onClose}>
+    <Modal title="ToDo" onClose={onClose}>
       <div className="space-y-4">
         <button
           type="button"
@@ -162,7 +162,7 @@ export default function TodoManageModal({
         <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
           {draftOpen.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-400">
-              未完了のやるべきことはありません。
+              未完了のToDoはありません。
             </p>
           ) : (
             draftOpen.map((t) => {

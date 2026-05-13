@@ -97,7 +97,7 @@ export default function RecurringTodoFormModal({
 
   return (
     <Modal
-      title={isEdit ? "毎月・毎年やるべきこと編集" : "毎月・毎年やるべきこと追加"}
+      title={isEdit ? "毎月・毎年ToDo編集" : "毎月・毎年ToDo追加"}
       onClose={onClose}
     >
       <div className="space-y-4">
