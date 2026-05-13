@@ -559,6 +559,9 @@ export default function Page() {
     endAt: Date;
     deductionMinutes: number;
     memo: string;
+    category: Category;
+    subcategory: string | null;
+    todoIds: string[];
     todoAllocations: TodoAllocation[];
   }) => {
     if (!editPastLogId) return;
@@ -571,7 +574,7 @@ export default function Page() {
     const startAtIso = toJstIso(input.startAt);
     const endAtIso = toJstIso(input.endAt);
     const normalized = normalizeAllocations(
-      target.todoIds,
+      input.todoIds,
       input.todoAllocations
     );
     const updated: LogEntry = {
@@ -579,7 +582,11 @@ export default function Page() {
       startAt: startAtIso,
       endAt: endAtIso,
       memo: input.memo,
+      category: input.category,
+      subcategory: input.subcategory,
       deductionMinutes: input.deductionMinutes,
+      todoIds: input.todoIds,
+      todoId: input.todoIds[0] ?? null,
       todoAllocations: normalized,
       durationMinutes: diffMinutes(startAtIso, endAtIso),
       updatedAt: nowIso,
@@ -1656,6 +1663,7 @@ export default function Page() {
           todos={todos}
           onClose={() => setTimelineOpen(false)}
           onEditTask={(log) => setEditPastLogId(log.id)}
+          onEditTodo={(todo) => setTodoForm({ mode: "edit", todo })}
           onAddPast={() => setPastOpen(true)}
         />
       )}
@@ -1667,6 +1675,7 @@ export default function Page() {
             <EditPastTaskModal
               log={target}
               todos={todos}
+              categories={categories}
               onClose={() => setEditPastLogId(null)}
               onConfirm={handleEditPastTaskConfirm}
             />

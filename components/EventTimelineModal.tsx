@@ -29,6 +29,7 @@ interface Props {
   todos: TodoItem[];
   onClose: () => void;
   onEditTask?: (log: LogEntry) => void;
+  onEditTodo?: (todo: TodoItem) => void;
   onAddPast?: () => void;
 }
 
@@ -86,6 +87,7 @@ export default function EventTimelineModal({
   todos,
   onClose,
   onEditTask,
+  onEditTodo,
   onAddPast,
 }: Props) {
   const today = formatLocalDateKey(new Date());
@@ -207,6 +209,17 @@ export default function EventTimelineModal({
       {selectedTodo && (
         <TimelineDetail
           item={selectedTodo}
+          onEdit={
+            onEditTodo
+              ? () => {
+                  const target = todos.find((t) => t.id === selectedTodo.id);
+                  if (!target) return;
+                  onEditTodo(target);
+                  setSelected(null);
+                  setSelectedTodo(null);
+                }
+              : undefined
+          }
           totalAllocated={
             selectedTodo.kind === "todoDone"
               ? {

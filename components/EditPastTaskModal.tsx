@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Modal from "./Modal";
+import CategorySelect from "./CategorySelect";
+import CompletedTodoPickerModal from "./CompletedTodoPickerModal";
 import type { LogEntry, TodoAllocation, TodoItem } from "@/lib/types";
+import type { Category, CategoryDefinition } from "@/lib/category";
 import {
   appendTimestampLine,
   diffMinutes,
@@ -20,12 +23,16 @@ import {
 interface Props {
   log: LogEntry;
   todos: TodoItem[];
+  categories: CategoryDefinition[];
   onClose: () => void;
   onConfirm: (input: {
     startAt: Date;
     endAt: Date;
     deductionMinutes: number;
     memo: string;
+    category: Category;
+    subcategory: string | null;
+    todoIds: string[];
     todoAllocations: TodoAllocation[];
   }) => void;
 }
@@ -39,6 +46,7 @@ interface RatioRow {
 export default function EditPastTaskModal({
   log,
   todos,
+  categories,
   onClose,
   onConfirm,
 }: Props) {
@@ -53,6 +61,11 @@ export default function EditPastTaskModal({
     String(log.deductionMinutes ?? 0)
   );
   const [memo, setMemo] = useState<string>(log.memo);
+  const [category, setCategory] = useState<Category>(log.category);
+  const [subcategory, setSubcategory] = useState<string | null>(
+    log.subcategory ?? null
+  );
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
 
   const linkedTodos = useMemo(() => {
     const result: TodoItem[] = [];
@@ -114,6 +127,7 @@ export default function EditPastTaskModal({
       endAt: endDate.toISOString(),
       durationMinutes: duration,
       deductionMinutes: deduction,
+      todoIds: rows.map((r) => r.todoId),
       todoAllocations: parsedAllocations,
     };
     const allocations = rows.map((r) => ({
@@ -135,6 +149,18 @@ export default function EditPastTaskModal({
     setRows((prev) =>
       prev.map((r) => (r.todoId === todoId ? { ...r, ratio: value } : r))
     );
+  };
+
+  const handleRemoveLinkedTodo = (todoId: string) => {
+    setRows((prev) => prev.filter((r) => r.todoId !== todoId));
+  };
+
+  const handlePickTodo = (todo: TodoItem) => {
+    setRows((prev) => {
+      if (prev.some((r) => r.todoId === todo.id)) return prev;
+      return [...prev, { todoId: todo.id, todo, ratio: "1" }];
+    });
+    setPickerOpen(false);
   };
 
   const handleSubmit = () => {
@@ -185,6 +211,9 @@ export default function EditPastTaskModal({
       endAt: endDate,
       deductionMinutes: deductionNum,
       memo,
+      category,
+      subcategory,
+      todoIds: rows.map((r) => r.todoId),
       todoAllocations: allocations,
     });
   };
@@ -199,6 +228,17 @@ export default function EditPastTaskModal({
             {log.task}
           </p>
         </div>
+
+        <CategorySelect
+          categories={categories}
+          value={category}
+          onChange={(c) => {
+            setCategory(c);
+            setSubcategory(null);
+          }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
+        />
 
         <div className="space-y-2">
           <label className="block text-sm text-slate-300">開始時間</label>
@@ -263,47 +303,61 @@ export default function EditPastTaskModal({
           />
         </div>
 
-        {rows.length > 0 && (
-          <div className="space-y-2 rounded-xl bg-slate-900/60 p-3">
-            <p className="text-sm font-semibold text-slate-200">
-              ToDoへの時間配分
-            </p>
+        <div className="space-y-2 rounded-xl bg-slate-900/60 p-3">
+          <p className="text-sm font-semibold text-slate-200">
+            紐づくToDo / 時間配分
+          </p>
+          {rows.length > 0 && (
             <p className="text-xs text-slate-400">
               配分率は割合ではなく相対比です。例：1:1
               は半分ずつ、2:1 は約2/3と1/3です。計算時に正規化され、分未満は切り捨てられます。
             </p>
-            {rows.map((r) => {
-              const alloc = preview.allocations.find(
-                (a) => a.todoId === r.todoId
-              );
-              return (
-                <div
-                  key={r.todoId}
-                  className="rounded-lg bg-slate-900 p-2 space-y-1"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex-1 break-words text-sm text-slate-100">
-                      {r.todo.title}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={r.ratio}
-                      onChange={(e) =>
-                        handleRatioChange(r.todoId, e.target.value)
-                      }
-                      className="w-20 rounded-md bg-slate-800 px-2 py-1 text-base text-white"
-                    />
-                  </div>
-                  <p className="text-xs text-sky-300">
-                    割当: {alloc?.minutes ?? 0}分
-                  </p>
+          )}
+          {rows.map((r) => {
+            const alloc = preview.allocations.find(
+              (a) => a.todoId === r.todoId
+            );
+            return (
+              <div
+                key={r.todoId}
+                className="rounded-lg bg-slate-900 p-2 space-y-1"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 break-words text-sm text-slate-100">
+                    {r.todo.title}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={r.ratio}
+                    onChange={(e) =>
+                      handleRatioChange(r.todoId, e.target.value)
+                    }
+                    className="w-20 rounded-md bg-slate-800 px-2 py-1 text-base text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveLinkedTodo(r.todoId)}
+                    className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-rose-600 hover:text-white"
+                  >
+                    解除
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <p className="text-xs text-sky-300">
+                  割当: {alloc?.minutes ?? 0}分
+                </p>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="w-full rounded-md bg-slate-800 py-2 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            ＋ 完了済みToDoを紐づける
+          </button>
+        </div>
 
         <div className="space-y-1 rounded-xl bg-slate-900/60 p-3 text-xs text-slate-300">
           <div className="flex justify-between">
@@ -335,6 +389,14 @@ export default function EditPastTaskModal({
           保存
         </button>
       </div>
+      {pickerOpen && (
+        <CompletedTodoPickerModal
+          todos={todos}
+          excludeIds={rows.map((r) => r.todoId)}
+          onClose={() => setPickerOpen(false)}
+          onPick={handlePickTodo}
+        />
+      )}
     </Modal>
   );
 }
