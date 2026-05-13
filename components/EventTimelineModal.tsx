@@ -29,6 +29,7 @@ interface Props {
   todos: TodoItem[];
   onClose: () => void;
   onEditTask?: (log: LogEntry) => void;
+  onAddPast?: () => void;
 }
 
 function shiftDate(dateKey: string, days: number): string {
@@ -85,6 +86,7 @@ export default function EventTimelineModal({
   todos,
   onClose,
   onEditTask,
+  onAddPast,
 }: Props) {
   const today = formatLocalDateKey(new Date());
   const [dateKey, setDateKey] = useState<string>(today);
@@ -114,14 +116,25 @@ export default function EventTimelineModal({
       >
         <header className="flex items-center justify-between gap-2 bg-slate-800 px-4 py-3 text-slate-100">
           <h2 className="text-lg font-bold">過去ログ</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-3 py-1 text-sm text-slate-300 hover:bg-slate-700"
-            aria-label="閉じる"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {onAddPast && (
+              <button
+                type="button"
+                onClick={onAddPast}
+                className="rounded-lg bg-slate-700 px-3 py-1 text-sm font-semibold text-slate-100 hover:bg-slate-600"
+              >
+                ＋ 過去の記録を追加
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full px-3 py-1 text-sm text-slate-300 hover:bg-slate-700"
+              aria-label="閉じる"
+            >
+              ✕
+            </button>
+          </div>
         </header>
 
         <div className="space-y-2 bg-white px-4 py-3 ring-1 ring-slate-200">

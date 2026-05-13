@@ -6,12 +6,10 @@ interface Props {
   onClose: () => void;
   onExport: () => void;
   onTimeline: () => void;
-  onAddPast: () => void;
   onAddEvent: () => void;
   onListEvents: () => void;
   onManageRecurring: () => void;
   onManageSubscriptions: () => void;
-  onOpenCountdown: () => void;
   onDelete: () => void;
 }
 
@@ -19,12 +17,10 @@ export default function MenuModal({
   onClose,
   onExport,
   onTimeline,
-  onAddPast,
   onAddEvent,
   onListEvents,
   onManageRecurring,
   onManageSubscriptions,
-  onOpenCountdown,
   onDelete,
 }: Props) {
   return (
@@ -36,13 +32,6 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           過去ログ
-        </button>
-        <button
-          type="button"
-          onClick={onAddPast}
-          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
-        >
-          過去の記録を追加
         </button>
         <button
           type="button"
@@ -71,13 +60,6 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           サブスク管理
-        </button>
-        <button
-          type="button"
-          onClick={onOpenCountdown}
-          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
-        >
-          カウントダウンタイマー
         </button>
         <button
           type="button"

@@ -1080,6 +1080,16 @@ export default function Page() {
         {mounted && (
           <button
             type="button"
+            onClick={() => setCountdownFormOpen(true)}
+            aria-label="カウントダウンタイマー"
+            className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
+          >
+            <StopwatchIcon className="h-5 w-5" />
+          </button>
+        )}
+        {mounted && (
+          <button
+            type="button"
             onClick={() => setTodoManageOpen(true)}
             aria-label="ToDo"
             className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
@@ -1270,7 +1280,6 @@ export default function Page() {
               setTimelineOpen(true);
               setMenuOpen(false);
             }}
-            onAddPast={() => setPastOpen(true)}
             onAddEvent={() => setEventOpen(true)}
             onListEvents={() => setEventListOpen(true)}
             onManageRecurring={() => {
@@ -1279,10 +1288,6 @@ export default function Page() {
             }}
             onManageSubscriptions={() => {
               setSubscriptionManageOpen(true);
-              setMenuOpen(false);
-            }}
-            onOpenCountdown={() => {
-              setCountdownFormOpen(true);
               setMenuOpen(false);
             }}
             onDelete={() => setDeleteOpen(true)}
@@ -1439,6 +1444,7 @@ export default function Page() {
           todos={todos}
           onClose={() => setTimelineOpen(false)}
           onEditTask={(log) => setEditPastLogId(log.id)}
+          onAddPast={() => setPastOpen(true)}
         />
       )}
       {editPastLogId &&
@@ -1496,6 +1502,26 @@ function TodoIcon({ className }: { className?: string }) {
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="m8 11 2 2 4-4" />
       <path d="M8 17h8" />
+    </svg>
+  );
+}
+
+function StopwatchIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <line x1="10" y1="2" x2="14" y2="2" />
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <circle cx="12" cy="14" r="8" />
+      <path d="M12 10v4l2 2" />
     </svg>
   );
 }
