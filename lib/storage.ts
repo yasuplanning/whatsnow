@@ -175,6 +175,18 @@ function migrateLogEntry(raw: any): LogEntry {
     typeof raw?.durationMinutes === "number" ? raw.durationMinutes : null;
   const durationMinutes =
     existingDuration !== null ? existingDuration : diffMinutes(startAt, endAt);
+  const todoId: string | null = raw?.todoId ?? null;
+  const rawTodoIds = Array.isArray(raw?.todoIds)
+    ? raw.todoIds.filter((v: unknown): v is string => typeof v === "string")
+    : null;
+  let todoIds: string[];
+  if (rawTodoIds && rawTodoIds.length > 0) {
+    todoIds = Array.from(new Set(rawTodoIds));
+  } else if (todoId) {
+    todoIds = [todoId];
+  } else {
+    todoIds = [];
+  }
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     type: "task",
@@ -188,7 +200,8 @@ function migrateLogEntry(raw: any): LogEntry {
     status,
     createdAt,
     updatedAt,
-    todoId: raw?.todoId ?? null,
+    todoId,
+    todoIds,
   };
 }
 

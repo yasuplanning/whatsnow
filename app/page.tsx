@@ -132,7 +132,7 @@ export default function Page() {
   const [task, setTask] = useState<string>("");
   const [taskCategory, setTaskCategory] = useState<Category>("その他");
   const [taskCategoryDirty, setTaskCategoryDirty] = useState(false);
-  const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
+  const [pendingTodoIds, setPendingTodoIds] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -144,7 +144,12 @@ export default function Page() {
   const [editOpen, setEditOpen] = useState(false);
   const [todoManageOpen, setTodoManageOpen] = useState(false);
   const [todoForm, setTodoForm] = useState<TodoFormState | null>(null);
-  const [todoFollowup, setTodoFollowup] = useState<TodoItem | null>(null);
+  const [todoFollowupQueue, setTodoFollowupQueue] = useState<string[]>([]);
+  const todoFollowup = useMemo<TodoItem | null>(() => {
+    const id = todoFollowupQueue[0];
+    if (!id) return null;
+    return getTodoById(todos, id);
+  }, [todoFollowupQueue, todos]);
   const [recurringTodos, setRecurringTodos] = useState<RecurringTodo[]>([]);
   const [recurringManageOpen, setRecurringManageOpen] = useState(false);
   const [recurringForm, setRecurringForm] = useState<RecurringFormState | null>(
@@ -162,9 +167,12 @@ export default function Page() {
   const inactivityNotifiedRef = useRef<string | null>(null);
 
   const activeLog = useMemo(() => findActiveLog(logs), [logs]);
-  const pendingTodo = useMemo(
-    () => (pendingTodoId ? getTodoById(todos, pendingTodoId) : null),
-    [pendingTodoId, todos]
+  const pendingTodos = useMemo(
+    () =>
+      pendingTodoIds
+        .map((id) => getTodoById(todos, id))
+        .filter((t): t is TodoItem => t !== null),
+    [pendingTodoIds, todos]
   );
 
   const reloadAllFromStorage = useCallback(() => {
@@ -202,7 +210,7 @@ export default function Page() {
     setSubscriptions(loadedSubscriptions);
     setTimers(getCountdownTimers());
     setLastActivityAt(loadLastActivityAt());
-    setPendingTodoId(null);
+    setPendingTodoIds([]);
     plannedEndNotifiedRef.current.clear();
     inactivityNotifiedRef.current = null;
     setPhase(findActiveLog(loaded) ? { kind: "active" } : { kind: "initial" });
@@ -346,13 +354,14 @@ export default function Page() {
       status: "active",
       createdAt: nowIso,
       updatedAt: nowIso,
-      todoId: pendingTodoId,
+      todoId: pendingTodoIds[0] ?? null,
+      todoIds: [...pendingTodoIds],
     };
     persist(upsertLog(logs, entry));
     setTask("");
     setTaskCategory("その他");
     setTaskCategoryDirty(false);
-    setPendingTodoId(null);
+    setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
   };
@@ -405,12 +414,12 @@ export default function Page() {
     setPhase({ kind: "initial" });
     markActivity();
 
-    const todoId = updated.todoId ?? null;
-    if (todoId) {
-      const linked = getTodoById(todos, todoId);
-      if (linked && linked.status === "open") {
-        setTodoFollowup(linked);
-      }
+    const openTodoIds = updated.todoIds.filter((id) => {
+      const t = getTodoById(todos, id);
+      return t !== null && t.status === "open";
+    });
+    if (openTodoIds.length > 0) {
+      setTodoFollowupQueue(openTodoIds);
     }
   };
 
@@ -431,7 +440,7 @@ export default function Page() {
     setSubscriptions([]);
     setTimers([]);
     setLastActivityAt(null);
-    setPendingTodoId(null);
+    setPendingTodoIds([]);
     plannedEndNotifiedRef.current.clear();
     inactivityNotifiedRef.current = null;
     setDeleteOpen(false);
@@ -463,6 +472,7 @@ export default function Page() {
       createdAt: nowIso,
       updatedAt: nowIso,
       todoId: null,
+      todoIds: [],
     };
     persist(upsertLog(logs, entry));
     setPastOpen(false);
@@ -532,11 +542,52 @@ export default function Page() {
   };
 
   const handleQuickPickTodo = (todo: TodoItem) => {
-    setTask(todo.title);
-    setTaskCategory(todo.category);
-    setTaskCategoryDirty(true);
-    setPendingTodoId(todo.id);
+    if (activeLog) {
+      handleLinkTodoToActive(todo.id);
+      setTodoManageOpen(false);
+      return;
+    }
+    if (pendingTodoIds.length === 0) {
+      setTask(todo.title);
+      setTaskCategory(todo.category);
+      setTaskCategoryDirty(true);
+    }
+    setPendingTodoIds((prev) =>
+      prev.includes(todo.id) ? prev : [...prev, todo.id]
+    );
     setTodoManageOpen(false);
+  };
+
+  const handleLinkTodoToActive = (todoId: string) => {
+    if (!activeLog) return;
+    if (activeLog.todoIds.includes(todoId)) return;
+    const nowIso = nowJstIso();
+    const updated: LogEntry = {
+      ...activeLog,
+      todoId: activeLog.todoId ?? todoId,
+      todoIds: [...activeLog.todoIds, todoId],
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
+  };
+
+  const handleUnlinkTodoFromActive = (todoId: string) => {
+    if (!activeLog) return;
+    if (!activeLog.todoIds.includes(todoId)) return;
+    const nowIso = nowJstIso();
+    const remaining = activeLog.todoIds.filter((id) => id !== todoId);
+    const updated: LogEntry = {
+      ...activeLog,
+      todoId:
+        activeLog.todoId === todoId ? remaining[0] ?? null : activeLog.todoId,
+      todoIds: remaining,
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
+  };
+
+  const handleUnlinkPendingTodo = (todoId: string) => {
+    setPendingTodoIds((prev) => prev.filter((id) => id !== todoId));
   };
 
   const handleTodoSubmit = (input: {
@@ -589,10 +640,24 @@ export default function Page() {
 
   const handleTodoDelete = () => {
     if (!todoForm || todoForm.mode !== "edit") return;
-    if (pendingTodoId === todoForm.todo.id) {
-      setPendingTodoId(null);
+    const deletedId = todoForm.todo.id;
+    setPendingTodoIds((prev) => prev.filter((id) => id !== deletedId));
+    if (activeLog && activeLog.todoIds.includes(deletedId)) {
+      const nowIso = nowJstIso();
+      const remaining = activeLog.todoIds.filter((id) => id !== deletedId);
+      persist(
+        upsertLog(logs, {
+          ...activeLog,
+          todoId:
+            activeLog.todoId === deletedId
+              ? remaining[0] ?? null
+              : activeLog.todoId,
+          todoIds: remaining,
+          updatedAt: nowIso,
+        })
+      );
     }
-    persistTodos(deleteTodo(todos, todoForm.todo.id));
+    persistTodos(deleteTodo(todos, deletedId));
     setTodoForm(null);
   };
 
@@ -600,10 +665,14 @@ export default function Page() {
     persistTodos(deleteTodo(todos, id));
   };
 
+  const advanceFollowup = () => {
+    setTodoFollowupQueue((prev) => prev.slice(1));
+  };
+
   const handleFollowupComplete = () => {
     if (!todoFollowup) return;
     persistTodos(completeTodo(todos, todoFollowup.id));
-    setTodoFollowup(null);
+    advanceFollowup();
   };
 
   const applyRecurringGeneration = useCallback(
@@ -863,7 +932,7 @@ export default function Page() {
     if (!todoFollowup) return;
     const current = getTodoById(todos, todoFollowup.id);
     if (!current) {
-      setTodoFollowup(null);
+      advanceFollowup();
       return;
     }
     const nowIso = nowJstIso();
@@ -874,7 +943,7 @@ export default function Page() {
       updatedAt: nowIso,
     };
     persistTodos(updateTodo(todos, updated));
-    setTodoFollowup(null);
+    advanceFollowup();
   };
 
   const elapsedMs = activeLog
@@ -885,14 +954,17 @@ export default function Page() {
       ? new Date(activeLog.plannedEndAt).getTime() - now
       : null;
 
-  const linkedTodoTitle = activeLog?.todoId
-    ? getTodoById(todos, activeLog.todoId)?.title ?? null
-    : null;
+  const linkedTodos = useMemo(() => {
+    if (!activeLog) return [] as TodoItem[];
+    return activeLog.todoIds
+      .map((id) => getTodoById(todos, id))
+      .filter((t): t is TodoItem => t !== null);
+  }, [activeLog, todos]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-end gap-2 px-4 py-3">
-        {mounted && !activeLog && (
+        {mounted && (
           <button
             type="button"
             onClick={() => setTodoManageOpen(true)}
@@ -917,18 +989,34 @@ export default function Page() {
               <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
                 what are you doing now?
               </h1>
-              {pendingTodo && (
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-sky-900/40 px-3 py-2 text-sm">
-                  <span className="break-words">
-                    <span className="text-sky-300">やるべきこと:</span>{" "}
-                    {pendingTodo.title}
-                  </span>
+              {pendingTodos.length > 0 && (
+                <div className="space-y-2 rounded-xl bg-sky-900/40 px-3 py-2 text-sm">
+                  <p className="text-sky-300">
+                    やるべきこと（{pendingTodos.length}件）
+                  </p>
+                  <ul className="space-y-1">
+                    {pendingTodos.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="break-words">{t.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnlinkPendingTodo(t.id)}
+                          className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+                        >
+                          解除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                   <button
                     type="button"
-                    onClick={() => setPendingTodoId(null)}
-                    className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+                    onClick={() => setTodoManageOpen(true)}
+                    className="w-full rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
                   >
-                    解除
+                    ＋ さらに紐付ける
                   </button>
                 </div>
               )}
@@ -971,10 +1059,26 @@ export default function Page() {
               >
                 {activeLog.category}
               </p>
-              {linkedTodoTitle && (
-                <p className="mt-2 text-xs text-sky-300">
-                  やるべきこと: {linkedTodoTitle}
-                </p>
+              {linkedTodos.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-sky-300">
+                  {linkedTodos.map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="break-words">
+                        やるべきこと: {t.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnlinkTodoFromActive(t.id)}
+                        className="shrink-0 rounded-md bg-slate-700 px-2 py-0.5 text-[10px] text-slate-200 hover:bg-slate-600"
+                      >
+                        解除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
@@ -1135,8 +1239,9 @@ export default function Page() {
       )}
       {todoFollowup && (
         <TodoFollowupModal
+          key={todoFollowup.id}
           todo={todoFollowup}
-          onClose={() => setTodoFollowup(null)}
+          onClose={advanceFollowup}
           onComplete={handleFollowupComplete}
           onContinue={handleFollowupContinue}
         />

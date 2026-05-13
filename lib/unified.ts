@@ -50,7 +50,7 @@ export function taskToUnified(t: LogEntry): UnifiedLog {
     photoId: null,
     photoPath: null,
     photoSummary: null,
-    todoId: t.todoId ?? null,
+    todoId: t.todoIds[0] ?? t.todoId ?? null,
     todoTitle: null,
     recurringTodoId: null,
     createdAt: t.createdAt,

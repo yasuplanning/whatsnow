@@ -18,6 +18,7 @@ export interface LogEntry {
   createdAt: string;
   updatedAt: string;
   todoId?: string | null;
+  todoIds: string[];
 }
 
 export interface EventEntry {
