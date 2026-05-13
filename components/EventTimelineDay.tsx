@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type {
   CheckinEntry,
   CountdownTimer,
@@ -355,8 +355,23 @@ export default function EventTimelineDay({
     () => buildItems(dateKey, tasks, events, checkins, countdowns, todos),
     [dateKey, tasks, events, checkins, countdowns, todos]
   );
-  const laidOut = useMemo(() => layoutTimeline(items), [items]);
-  const summary = useMemo(() => computeSummary(items), [items]);
+  const totalSummary = useMemo(() => computeSummary(items), [items]);
+  const [filters, setFilters] = useState<Record<TimelineKind, boolean>>({
+    task: true,
+    event: true,
+    checkin: true,
+    countdown: true,
+    todoDone: true,
+  });
+  const visibleItems = useMemo(
+    () => items.filter((it) => filters[it.kind]),
+    [items, filters]
+  );
+  const visibleSummary = useMemo(
+    () => computeSummary(visibleItems),
+    [visibleItems]
+  );
+  const laidOut = useMemo(() => layoutTimeline(visibleItems), [visibleItems]);
 
   if (items.length === 0) {
     return (
@@ -366,25 +381,78 @@ export default function EventTimelineDay({
     );
   }
 
-  const totalDuration = Array.from(summary.byCategoryMinutes.values()).reduce(
-    (a, b) => a + b,
-    0
-  );
+  const totalDuration = Array.from(
+    visibleSummary.byCategoryMinutes.values()
+  ).reduce((a, b) => a + b, 0);
+
+  const toggleFilter = (kind: TimelineKind) =>
+    setFilters((prev) => ({ ...prev, [kind]: !prev[kind] }));
+
+  const filterEntries: { kind: TimelineKind; label: string }[] = [
+    { kind: "task", label: "task" },
+    { kind: "event", label: "event" },
+    { kind: "checkin", label: "checkin" },
+    { kind: "countdown", label: "countdown" },
+    { kind: "todoDone", label: "todo完了" },
+  ];
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl bg-white p-3 text-xs text-slate-700 ring-1 ring-slate-200">
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <span>task: {summary.byKind.task}件</span>
-          <span>event: {summary.byKind.event}件</span>
-          <span>checkin: {summary.byKind.checkin}件</span>
-          <span>countdown: {summary.byKind.countdown}件</span>
-          <span>todo完了: {summary.byKind.todoDone}件</span>
+      <div className="sticky top-0 z-20 rounded-xl bg-white p-3 text-xs text-slate-700 ring-1 ring-slate-200 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setFilters({
+                  task: true,
+                  event: true,
+                  checkin: true,
+                  countdown: true,
+                  todoDone: true,
+                })
+              }
+              className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-300"
+            >
+              全チェック
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setFilters({
+                  task: false,
+                  event: false,
+                  checkin: false,
+                  countdown: false,
+                  todoDone: false,
+                })
+              }
+              className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-300"
+            >
+              全解除
+            </button>
+          </div>
+          {filterEntries.map((f) => (
+            <label
+              key={f.kind}
+              className="flex cursor-pointer items-center gap-1 select-none"
+            >
+              <input
+                type="checkbox"
+                checked={filters[f.kind]}
+                onChange={() => toggleFilter(f.kind)}
+                className="h-3.5 w-3.5"
+              />
+              <span>
+                {f.label}: {totalSummary.byKind[f.kind]}件
+              </span>
+            </label>
+          ))}
           {totalDuration > 0 && <span>合計時間: {totalDuration}分</span>}
         </div>
-        {summary.byCategoryMinutes.size > 0 && (
+        {visibleSummary.byCategoryMinutes.size > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {Array.from(summary.byCategoryMinutes.entries())
+            {Array.from(visibleSummary.byCategoryMinutes.entries())
               .sort((a, b) => b[1] - a[1])
               .map(([cat, min]) => (
                 <span
