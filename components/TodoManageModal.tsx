@@ -13,7 +13,6 @@ interface Props {
   onEdit: (todo: TodoItem) => void;
   onReorder: (orderedOpenIds: string[]) => void;
   onPick: (todo: TodoItem) => void;
-  onDeleteDone: (id: string) => void;
 }
 
 export default function TodoManageModal({
@@ -23,7 +22,6 @@ export default function TodoManageModal({
   onEdit,
   onReorder,
   onPick,
-  onDeleteDone,
 }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
   const nowMs = Date.now();
@@ -259,30 +257,13 @@ export default function TodoManageModal({
                     key={t.id}
                     className="rounded-xl bg-slate-900/60 p-3 text-sm"
                   >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(t)}
-                        className="flex-1 break-words text-left font-semibold text-slate-200 line-through hover:text-slate-100"
-                      >
-                        {t.title}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            typeof window !== "undefined" &&
-                            !window.confirm("削除しますか？")
-                          ) {
-                            return;
-                          }
-                          onDeleteDone(t.id);
-                        }}
-                        className="shrink-0 rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-rose-600 hover:text-white"
-                      >
-                        削除
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onEdit(t)}
+                      className="block w-full break-words text-left font-semibold text-slate-200 line-through hover:text-slate-100"
+                    >
+                      {t.title}
+                    </button>
                     {t.doneAt && (
                       <p className="mt-1 text-xs text-slate-500">
                         完了 {formatClock(t.doneAt)}

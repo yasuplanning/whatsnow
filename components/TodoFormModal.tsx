@@ -65,7 +65,7 @@ function makeAlertId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-const PROGRESS_OPTIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
+const PROGRESS_OPTIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
 function defaultDeadline(): Date {
   const d = new Date();
@@ -84,6 +84,7 @@ export default function TodoFormModal({
   onAddSubcategory,
 }: Props) {
   const isEdit = initial !== null;
+  const isDone = initial?.status === "done";
   const [title, setTitle] = useState<string>(initial?.title ?? "");
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
   const [category, setCategory] = useState<Category>(
@@ -95,7 +96,6 @@ export default function TodoFormModal({
   const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [progress, setProgress] = useState<number>(() => {
     const init = initial?.progress ?? 0;
-    if (init >= 100) return 90;
     return PROGRESS_OPTIONS.includes(init) ? init : 0;
   });
   const [deadlineMode, setDeadlineMode] = useState<"none" | "set">(
@@ -268,7 +268,7 @@ export default function TodoFormModal({
             ))}
           </select>
           <p className="text-xs text-slate-400">
-            100% にするには「完了にする」を押してください。
+            100% を選んで保存すると完了になります。
           </p>
         </div>
 
@@ -388,7 +388,8 @@ export default function TodoFormModal({
               <button
                 type="button"
                 onClick={handleComplete}
-                className="rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white hover:bg-emerald-500"
+                disabled={isDone}
+                className="rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:hover:bg-slate-700"
               >
                 完了にする
               </button>

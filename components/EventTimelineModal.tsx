@@ -179,7 +179,16 @@ export default function EventTimelineModal({
             checkins={checkins}
             countdowns={countdowns}
             todos={todos}
-            onSelect={setSelected}
+            onSelect={(item) => {
+              if (item.kind === "todoDone" && onEditTodo) {
+                const target = todos.find((t) => t.id === item.id);
+                if (target) {
+                  onEditTodo(target);
+                  return;
+                }
+              }
+              setSelected(item);
+            }}
           />
         </div>
       </div>

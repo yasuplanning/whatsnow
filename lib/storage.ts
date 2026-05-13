@@ -374,18 +374,22 @@ function migrateTodoItem(raw: any): TodoItem {
     })
     .filter((a: any): a is NonNullable<typeof a> => a !== null)
     .slice(0, 3);
+  const rawProgress = typeof raw?.progress === "number" ? raw.progress : 0;
+  const status: "open" | "done" =
+    raw?.status === "done" || rawProgress >= 100 ? "done" : "open";
+  const progress = status === "done" ? 100 : Math.max(0, Math.min(90, rawProgress));
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     title,
     memo,
     category,
     subcategory: readSubcategory(raw),
-    progress: typeof raw?.progress === "number" ? raw.progress : 0,
-    status: raw?.status === "done" ? "done" : "open",
+    progress,
+    status,
     deadline,
     createdAt,
     updatedAt,
-    doneAt,
+    doneAt: status === "done" ? doneAt ?? updatedAt : null,
     recurringTodoId: raw?.recurringTodoId ?? null,
     recurringPeriodKey: raw?.recurringPeriodKey ?? null,
     subscriptionId: raw?.subscriptionId ?? null,

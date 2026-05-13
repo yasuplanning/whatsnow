@@ -871,6 +871,7 @@ export default function Page() {
   }) => {
     const nowIso = nowJstIso();
     if (!todoForm) return;
+    const isDone = input.progress >= 100;
     if (todoForm.mode === "add") {
       const entry: TodoItem = {
         id: generateId(),
@@ -879,11 +880,11 @@ export default function Page() {
         category: input.category,
         subcategory: input.subcategory,
         progress: input.progress,
-        status: "open",
+        status: isDone ? "done" : "open",
         deadline: input.deadline ? toJstIso(input.deadline) : null,
         createdAt: nowIso,
         updatedAt: nowIso,
-        doneAt: null,
+        doneAt: isDone ? nowIso : null,
         important: input.important,
         alerts: input.alerts,
       };
@@ -898,6 +899,7 @@ export default function Page() {
         const sameMinutes = prev.minutesBefore === a.minutesBefore;
         return sameMinutes ? { ...a, notified: prev.notified } : a;
       });
+      const wasDone = todoForm.todo.status === "done";
       const updated: TodoItem = {
         ...todoForm.todo,
         title: input.title,
@@ -905,6 +907,8 @@ export default function Page() {
         category: input.category,
         subcategory: input.subcategory,
         progress: input.progress,
+        status: isDone ? "done" : "open",
+        doneAt: isDone ? (wasDone ? todoForm.todo.doneAt : nowIso) : null,
         deadline: input.deadline ? toJstIso(input.deadline) : null,
         updatedAt: nowIso,
         important: input.important,
@@ -945,23 +949,6 @@ export default function Page() {
     persist(nextLogs);
     persistTodos(deleteTodo(todos, deletedId));
     setTodoForm(null);
-  };
-
-  const handleDeleteDoneTodo = (id: string) => {
-    const nowIso = nowJstIso();
-    const nextLogs = logs.map((log) => {
-      if (!log.todoIds.includes(id)) return log;
-      const remaining = log.todoIds.filter((x) => x !== id);
-      return {
-        ...log,
-        todoId: log.todoId === id ? remaining[0] ?? null : log.todoId,
-        todoIds: remaining,
-        todoAllocations: normalizeAllocations(remaining, log.todoAllocations),
-        updatedAt: nowIso,
-      };
-    });
-    persist(nextLogs);
-    persistTodos(deleteTodo(todos, id));
   };
 
   const advanceFollowup = () => {
@@ -1594,20 +1581,6 @@ export default function Page() {
           onEdit={(todo) => setTodoForm({ mode: "edit", todo })}
           onReorder={handleReorderTodos}
           onPick={handleQuickPickTodo}
-          onDeleteDone={handleDeleteDoneTodo}
-        />
-      )}
-      {todoForm && (
-        <TodoFormModal
-          categories={categories}
-          initial={todoForm.mode === "edit" ? todoForm.todo : null}
-          onClose={() => setTodoForm(null)}
-          onSubmit={handleTodoSubmit}
-          onComplete={
-            todoForm.mode === "edit" ? handleTodoComplete : undefined
-          }
-          onDelete={todoForm.mode === "edit" ? handleTodoDelete : undefined}
-          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {todoFollowup && (
@@ -1722,6 +1695,19 @@ export default function Page() {
             />
           );
         })()}
+      {todoForm && (
+        <TodoFormModal
+          categories={categories}
+          initial={todoForm.mode === "edit" ? todoForm.todo : null}
+          onClose={() => setTodoForm(null)}
+          onSubmit={handleTodoSubmit}
+          onComplete={
+            todoForm.mode === "edit" ? handleTodoComplete : undefined
+          }
+          onDelete={todoForm.mode === "edit" ? handleTodoDelete : undefined}
+          onAddSubcategory={handleRequestAddSubcategory}
+        />
+      )}
     </main>
   );
 }
