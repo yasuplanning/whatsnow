@@ -14,6 +14,7 @@ export interface LogEntry {
   type: "task";
   task: string;
   category: Category;
+  subcategory: string | null;
   startAt: string;
   plannedEndAt: string | null;
   endAt: string | null;
@@ -33,6 +34,7 @@ export interface EventEntry {
   type: "event";
   content: string;
   category: Category;
+  subcategory: string | null;
   timestamp: string;
   photoId: string | null;
   photoPath: string | null;
@@ -48,6 +50,7 @@ export interface CheckinEntry {
   type: "checkin";
   text: string;
   category: Category;
+  subcategory: string | null;
   checkedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +62,7 @@ export interface CountdownTimer {
   id: string;
   title: string;
   category: Category;
+  subcategory: string | null;
   memo: string;
   durationMinutes: number;
   startedAt: string;
@@ -78,6 +82,7 @@ export interface RecurringTodo {
   title: string;
   memo: string;
   category: Category;
+  subcategory: string | null;
   frequency: RecurringFrequency;
   dayOfMonth: number;
   monthOfYear: number | null;
@@ -100,6 +105,7 @@ export interface TodoItem {
   title: string;
   memo: string;
   category: Category;
+  subcategory: string | null;
   progress: number;
   status: TodoStatus;
   deadline: string | null;
@@ -134,6 +140,7 @@ export interface Subscription {
   cancelUrl: string;
   memo: string;
   category: Category;
+  subcategory: string | null;
   status: SubscriptionStatus;
   reviewEnabled: boolean;
   reviewDaysBefore: number;

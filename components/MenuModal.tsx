@@ -4,23 +4,21 @@ import Modal from "./Modal";
 
 interface Props {
   onClose: () => void;
-  onExport: () => void;
   onTimeline: () => void;
   onAddEvent: () => void;
   onListEvents: () => void;
-  onManageRecurring: () => void;
-  onManageSubscriptions: () => void;
+  onOpenAggregate: () => void;
+  onOpenSettings: () => void;
   onDelete: () => void;
 }
 
 export default function MenuModal({
   onClose,
-  onExport,
   onTimeline,
   onAddEvent,
   onListEvents,
-  onManageRecurring,
-  onManageSubscriptions,
+  onOpenAggregate,
+  onOpenSettings,
   onDelete,
 }: Props) {
   return (
@@ -49,24 +47,17 @@ export default function MenuModal({
         </button>
         <button
           type="button"
-          onClick={onManageRecurring}
+          onClick={onOpenAggregate}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          毎月・毎年ToDo
+          集計
         </button>
         <button
           type="button"
-          onClick={onManageSubscriptions}
+          onClick={onOpenSettings}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          サブスク管理
-        </button>
-        <button
-          type="button"
-          onClick={onExport}
-          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
-        >
-          バックアップ
+          設定
         </button>
         <button
           type="button"

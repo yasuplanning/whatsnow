@@ -110,6 +110,7 @@ export function generateRecurringTodosForNow(
       createdAt: nowIso,
       updatedAt: nowIso,
       doneAt: null,
+      subcategory: template.subcategory ?? null,
       recurringTodoId: template.id,
       recurringPeriodKey: info.periodKey,
       important: false,

@@ -9,7 +9,12 @@ import type {
   SubscriptionStatus,
   TodoItem,
 } from "./types";
-import { inferCategoryFromTitleAndMemo, normalizeCategory } from "./category";
+import {
+  type CategoryDefinition,
+  getDefaultCategories,
+  inferCategoryFromTitleAndMemo,
+  normalizeCategory,
+} from "./category";
 import { diffMinutes, migrateIsoToJst } from "./time";
 
 const STORAGE_KEY = "whatsnow.logs.v1";
@@ -21,7 +26,14 @@ const RECURRING_TODO_STORAGE_KEY = "whatsnow.recurringTodos.v1";
 const COUNTDOWN_STORAGE_KEY = "whatsnow.countdowns.v1";
 const SUBSCRIPTION_STORAGE_KEY = "whatsnow.subscriptions.v1";
 const PHOTO_STORAGE_KEY = "whatsnow.photos.v1";
+const CATEGORY_STORAGE_KEY = "whatsnow.categories.v1";
 const BACKUP_KEY = "whatsnow.backup.preMigration.v1";
+
+function readSubcategory(raw: any): string | null {
+  return typeof raw?.subcategory === "string" && raw.subcategory !== ""
+    ? raw.subcategory
+    : null;
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -215,6 +227,7 @@ function migrateLogEntry(raw: any): LogEntry {
     type: "task",
     task,
     category,
+    subcategory: readSubcategory(raw),
     startAt,
     plannedEndAt,
     endAt,
@@ -267,6 +280,7 @@ function migrateEventEntry(raw: any): EventEntry {
     type: "event",
     content,
     category,
+    subcategory: readSubcategory(raw),
     timestamp,
     photoId,
     photoPath,
@@ -292,6 +306,7 @@ function migrateCheckinEntry(raw: any): CheckinEntry {
     type: "checkin",
     text,
     category,
+    subcategory: readSubcategory(raw),
     checkedAt,
     createdAt,
     updatedAt,
@@ -318,6 +333,7 @@ function migrateCountdownTimer(raw: any): CountdownTimer {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     title,
     category,
+    subcategory: readSubcategory(raw),
     memo,
     durationMinutes,
     startedAt,
@@ -363,6 +379,7 @@ function migrateTodoItem(raw: any): TodoItem {
     title,
     memo,
     category,
+    subcategory: readSubcategory(raw),
     progress: typeof raw?.progress === "number" ? raw.progress : 0,
     status: raw?.status === "done" ? "done" : "open",
     deadline,
@@ -400,6 +417,7 @@ function migrateSubscription(raw: any): Subscription {
     raw?.status === "cancelled"
       ? raw.status
       : "active";
+  const subcategory = readSubcategory(raw);
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     serviceName,
@@ -420,6 +438,7 @@ function migrateSubscription(raw: any): Subscription {
     cancelUrl: typeof raw?.cancelUrl === "string" ? raw.cancelUrl : "",
     memo,
     category,
+    subcategory,
     status,
     reviewEnabled: raw?.reviewEnabled === true,
     reviewDaysBefore:
@@ -445,6 +464,7 @@ function migrateRecurring(raw: any): RecurringTodo {
     title,
     memo,
     category,
+    subcategory: readSubcategory(raw),
     frequency: raw?.frequency === "yearly" ? "yearly" : "monthly",
     dayOfMonth: typeof raw?.dayOfMonth === "number" ? raw.dayOfMonth : 1,
     monthOfYear: typeof raw?.monthOfYear === "number" ? raw.monthOfYear : null,
@@ -874,6 +894,80 @@ export function clearAllPhotos(): void {
   }
 }
 
+function migrateCategoryDefinition(raw: any): CategoryDefinition | null {
+  if (!raw || typeof raw !== "object") return null;
+  const name = typeof raw?.name === "string" ? raw.name : "";
+  if (!name) return null;
+  const id =
+    typeof raw?.id === "string" && raw.id !== "" ? raw.id : `cat-${name}`;
+  const color =
+    typeof raw?.color === "string" && raw.color !== ""
+      ? raw.color
+      : "bg-slate-200 text-slate-800";
+  const builtin = raw?.builtin === true;
+  const subcategories = Array.isArray(raw?.subcategories)
+    ? raw.subcategories.filter(
+        (s: unknown): s is string => typeof s === "string" && s !== ""
+      )
+    : [];
+  return { id, name, color, builtin, subcategories };
+}
+
+export function getCategoriesFromStorage(): CategoryDefinition[] {
+  if (!isBrowser()) return getDefaultCategories();
+  ensureBackup();
+  let raw: unknown;
+  try {
+    const text = window.localStorage.getItem(CATEGORY_STORAGE_KEY);
+    raw = text ? JSON.parse(text) : null;
+  } catch {
+    raw = null;
+  }
+  if (!Array.isArray(raw)) {
+    const defaults = getDefaultCategories();
+    saveCategories(defaults);
+    return defaults;
+  }
+  const migrated: CategoryDefinition[] = [];
+  for (const item of raw) {
+    const def = migrateCategoryDefinition(item);
+    if (def) migrated.push(def);
+  }
+  if (migrated.length === 0) {
+    const defaults = getDefaultCategories();
+    saveCategories(defaults);
+    return defaults;
+  }
+  if (!migrated.some((c) => c.name === "その他")) {
+    migrated.push({
+      id: "builtin-その他",
+      name: "その他",
+      color: "bg-slate-200 text-slate-800",
+      builtin: true,
+      subcategories: [],
+    });
+  }
+  return migrated;
+}
+
+export function saveCategories(items: CategoryDefinition[]): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAllCategories(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(CATEGORY_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export interface BackupSnapshot {
   logs: LogEntry[];
   events: EventEntry[];
@@ -882,6 +976,7 @@ export interface BackupSnapshot {
   recurringTodos: RecurringTodo[];
   countdowns: CountdownTimer[];
   subscriptions: Subscription[];
+  categories: CategoryDefinition[];
   lastActivityAt: string | null;
   photos: Record<string, string>;
 }
@@ -895,6 +990,9 @@ export function restoreAllData(snapshot: BackupSnapshot): void {
   saveRecurringTodos(snapshot.recurringTodos);
   saveCountdownTimers(snapshot.countdowns);
   saveSubscriptions(snapshot.subscriptions);
+  if (snapshot.categories && snapshot.categories.length > 0) {
+    saveCategories(snapshot.categories);
+  }
   setAllPhotos(snapshot.photos);
   if (snapshot.lastActivityAt) {
     saveLastActivityAt(snapshot.lastActivityAt);

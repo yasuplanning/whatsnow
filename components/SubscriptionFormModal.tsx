@@ -10,11 +10,13 @@ import type {
 import {
   inferCategoryFromTitleAndMemo,
   type Category,
+  type CategoryDefinition,
 } from "@/lib/category";
 import CategorySelect from "./CategorySelect";
 import { pad2, toJstIso } from "@/lib/time";
 
 interface Props {
+  categories: CategoryDefinition[];
   initial: Subscription | null;
   onClose: () => void;
   onSubmit: (input: SubmitInput) => void;
@@ -32,6 +34,7 @@ export interface SubmitInput {
   cancelUrl: string;
   memo: string;
   category: Category;
+  subcategory: string | null;
   status: SubscriptionStatus;
   reviewEnabled: boolean;
   reviewDaysBefore: number;
@@ -77,6 +80,7 @@ function defaultNextRenewal(): string {
 }
 
 export default function SubscriptionFormModal({
+  categories,
   initial,
   onClose,
   onSubmit,
@@ -114,6 +118,9 @@ export default function SubscriptionFormModal({
   );
   const [category, setCategory] = useState<Category>(
     initial?.category ?? "その他"
+  );
+  const [subcategory, setSubcategory] = useState<string | null>(
+    initial?.subcategory ?? null
   );
   const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [error, setError] = useState<string>("");
@@ -166,6 +173,7 @@ export default function SubscriptionFormModal({
       cancelUrl,
       memo,
       category,
+      subcategory,
       status,
       reviewEnabled,
       reviewDaysBefore,
@@ -289,12 +297,15 @@ export default function SubscriptionFormModal({
         </div>
 
         <CategorySelect
+          categories={categories}
           label="用途カテゴリ"
           value={category}
           onChange={(c) => {
             setCategoryDirty(true);
             setCategory(c);
           }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
         />
 
         <div className="space-y-2">

@@ -18,6 +18,7 @@ import {
   addSubscription,
   addTodo,
   cancelCountdownTimer,
+  clearAllCategories,
   clearAllCheckins,
   clearAllCountdownTimers,
   clearAllEvents,
@@ -33,6 +34,7 @@ import {
   deleteTodo,
   findActiveLog,
   generateId,
+  getCategoriesFromStorage,
   getCountdownTimers,
   getRecurringTodos,
   getSubscriptions,
@@ -45,6 +47,7 @@ import {
   removeEvent,
   reorderOpenTodos,
   savePhoto,
+  saveCategories,
   saveCheckins,
   saveCountdownTimers,
   saveEvents,
@@ -78,9 +81,11 @@ import {
 } from "@/lib/time";
 import { normalizeAllocations } from "@/lib/allocation";
 import {
-  CATEGORY_COLOR,
   inferCategoryFromTitleAndMemo,
+  getCategoryColor,
+  getDefaultCategories,
   type Category,
+  type CategoryDefinition,
 } from "@/lib/category";
 import CategorySelect from "@/components/CategorySelect";
 import EventTimelineModal from "@/components/EventTimelineModal";
@@ -97,6 +102,10 @@ import TodoManageModal from "@/components/TodoManageModal";
 import TodoFormModal from "@/components/TodoFormModal";
 import TodoFollowupModal from "@/components/TodoFollowupModal";
 import EditPastTaskModal from "@/components/EditPastTaskModal";
+import SettingsModal from "@/components/SettingsModal";
+import CategoryManageModal from "@/components/CategoryManageModal";
+import CategoryFormModal from "@/components/CategoryFormModal";
+import AggregateModal from "@/components/AggregateModal";
 import RecurringTodoManageModal from "@/components/RecurringTodoManageModal";
 import RecurringTodoFormModal from "@/components/RecurringTodoFormModal";
 import CountdownFormModal from "@/components/CountdownFormModal";
@@ -126,6 +135,10 @@ type SubscriptionFormState =
   | { mode: "add" }
   | { mode: "edit"; item: Subscription };
 
+type CategoryFormState =
+  | { mode: "add" }
+  | { mode: "edit"; item: CategoryDefinition };
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -135,6 +148,7 @@ export default function Page() {
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
   const [task, setTask] = useState<string>("");
   const [taskCategory, setTaskCategory] = useState<Category>("その他");
+  const [taskSubcategory, setTaskSubcategory] = useState<string | null>(null);
   const [taskCategoryDirty, setTaskCategoryDirty] = useState(false);
   const [pendingTodoIds, setPendingTodoIds] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
@@ -164,6 +178,15 @@ export default function Page() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [editPastLogId, setEditPastLogId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [categories, setCategories] = useState<CategoryDefinition[]>(() =>
+    getDefaultCategories()
+  );
+  const [aggregateOpen, setAggregateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [categoryManageOpen, setCategoryManageOpen] = useState(false);
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState | null>(
+    null
+  );
   const [subscriptionManageOpen, setSubscriptionManageOpen] = useState(false);
   const [subscriptionForm, setSubscriptionForm] =
     useState<SubscriptionFormState | null>(null);
@@ -185,6 +208,7 @@ export default function Page() {
     setLogs(loaded);
     setEvents(loadEvents());
     setCheckins(loadCheckins());
+    setCategories(getCategoriesFromStorage());
     const loadedTodos = getTodos();
     const loadedRecurring = getRecurringTodos();
     const loadedSubscriptions = getSubscriptions();
@@ -364,6 +388,124 @@ export default function Page() {
     saveCountdownTimers(next);
   }, []);
 
+  const persistCategories = useCallback((next: CategoryDefinition[]) => {
+    setCategories(next);
+    saveCategories(next);
+  }, []);
+
+  const handleCategorySubmit = (input: {
+    name: string;
+    color: string;
+    subcategories: string[];
+  }) => {
+    if (!categoryForm) return;
+    const nowIso = nowJstIso();
+    if (categoryForm.mode === "add") {
+      const newCat: CategoryDefinition = {
+        id: `user-${generateId()}`,
+        name: input.name,
+        color: input.color,
+        builtin: false,
+        subcategories: input.subcategories,
+      };
+      persistCategories([...categories, newCat]);
+    } else {
+      const prev = categoryForm.item;
+      const updated: CategoryDefinition = {
+        ...prev,
+        name: input.name,
+        color: input.color,
+        subcategories: input.subcategories,
+      };
+      const renamedFrom = prev.name !== input.name ? prev.name : null;
+      const removedSubs = prev.subcategories.filter(
+        (s) => !input.subcategories.includes(s)
+      );
+      persistCategories(
+        categories.map((c) => (c.id === prev.id ? updated : c))
+      );
+      if (renamedFrom || removedSubs.length > 0) {
+        rewriteCategoryRefs({
+          renameFromTo: renamedFrom
+            ? { from: renamedFrom, to: input.name }
+            : null,
+          clearSubcategoriesFor:
+            removedSubs.length > 0
+              ? { categoryName: input.name, subcategories: removedSubs }
+              : null,
+          deleteName: null,
+          nowIso,
+        });
+      }
+    }
+    setCategoryForm(null);
+  };
+
+  const handleCategoryDelete = () => {
+    if (!categoryForm || categoryForm.mode !== "edit") return;
+    const target = categoryForm.item;
+    if (target.name === "その他") return;
+    const nowIso = nowJstIso();
+    persistCategories(categories.filter((c) => c.id !== target.id));
+    rewriteCategoryRefs({
+      renameFromTo: null,
+      clearSubcategoriesFor: null,
+      deleteName: target.name,
+      nowIso,
+    });
+    setCategoryForm(null);
+  };
+
+  const rewriteCategoryRefs = (opts: {
+    renameFromTo: { from: string; to: string } | null;
+    clearSubcategoriesFor: {
+      categoryName: string;
+      subcategories: string[];
+    } | null;
+    deleteName: string | null;
+    nowIso: string;
+  }) => {
+    const applyCat = <T extends { category: string; subcategory: string | null }>(
+      item: T
+    ): T => {
+      let cat = item.category;
+      let sub = item.subcategory;
+      if (opts.deleteName && cat === opts.deleteName) {
+        cat = "その他";
+        sub = null;
+      } else if (opts.renameFromTo && cat === opts.renameFromTo.from) {
+        cat = opts.renameFromTo.to;
+      }
+      if (
+        opts.clearSubcategoriesFor &&
+        cat === opts.clearSubcategoriesFor.categoryName &&
+        sub &&
+        opts.clearSubcategoriesFor.subcategories.includes(sub)
+      ) {
+        sub = null;
+      }
+      if (cat === item.category && sub === item.subcategory) return item;
+      return { ...item, category: cat, subcategory: sub };
+    };
+    const nextLogs = logs.map(applyCat);
+    if (nextLogs.some((l, i) => l !== logs[i])) persist(nextLogs);
+    const nextEvents = events.map(applyCat);
+    if (nextEvents.some((e, i) => e !== events[i])) persistEvents(nextEvents);
+    const nextCheckins = checkins.map(applyCat);
+    if (nextCheckins.some((c, i) => c !== checkins[i]))
+      persistCheckins(nextCheckins);
+    const nextTodos = todos.map(applyCat);
+    if (nextTodos.some((t, i) => t !== todos[i])) persistTodos(nextTodos);
+    const nextRecurring = recurringTodos.map(applyCat);
+    if (nextRecurring.some((r, i) => r !== recurringTodos[i]))
+      persistRecurring(nextRecurring);
+    const nextSubscriptions = subscriptions.map(applyCat);
+    if (nextSubscriptions.some((s, i) => s !== subscriptions[i]))
+      persistSubscriptions(nextSubscriptions);
+    const nextTimers = timers.map(applyCat);
+    if (nextTimers.some((t, i) => t !== timers[i])) persistTimers(nextTimers);
+  };
+
   const markActivity = useCallback(() => {
     const iso = nowJstIso();
     setLastActivityAt(iso);
@@ -388,6 +530,7 @@ export default function Page() {
       type: "task",
       task: trimmed,
       category: taskCategory,
+      subcategory: taskSubcategory,
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -404,6 +547,7 @@ export default function Page() {
     persist(upsertLog(logs, entry));
     setTask("");
     setTaskCategory("その他");
+    setTaskSubcategory(null);
     setTaskCategoryDirty(false);
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
@@ -450,6 +594,7 @@ export default function Page() {
     plannedEndAt: Date | null;
     memo: string;
     category: Category;
+    subcategory: string | null;
   }) => {
     if (!activeLog) return;
     const nowIso = nowJstIso();
@@ -464,6 +609,7 @@ export default function Page() {
       plannedEndAt: plannedEndAtIso,
       memo: input.memo,
       category: input.category,
+      subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, activeLog.endAt),
       updatedAt: nowIso,
     };
@@ -509,6 +655,7 @@ export default function Page() {
     clearAllRecurringTodos();
     clearAllCountdownTimers();
     clearAllSubscriptions();
+    clearAllCategories();
     clearLastActivityAt();
     setLogs([]);
     setEvents([]);
@@ -517,6 +664,7 @@ export default function Page() {
     setRecurringTodos([]);
     setSubscriptions([]);
     setTimers([]);
+    setCategories(getDefaultCategories());
     setLastActivityAt(null);
     setPendingTodoIds([]);
     plannedEndNotifiedRef.current.clear();
@@ -532,6 +680,7 @@ export default function Page() {
     endAt: Date;
     memo: string;
     category: Category;
+    subcategory: string | null;
   }) => {
     const nowIso = nowJstIso();
     const startAtIso = toJstIso(input.startAt);
@@ -541,6 +690,7 @@ export default function Page() {
       type: "task",
       task: input.task,
       category: input.category,
+      subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, endAtIso),
       startAt: startAtIso,
       plannedEndAt: null,
@@ -567,6 +717,7 @@ export default function Page() {
     memo: string;
     timestamp: Date;
     category: Category;
+    subcategory: string | null;
   }) => {
     const nowIso = nowJstIso();
     let photoId: string | null = null;
@@ -581,6 +732,7 @@ export default function Page() {
       type: "event",
       content: input.content,
       category: input.category,
+      subcategory: input.subcategory,
       photoId,
       photoPath,
       photoSummary: input.photoSummary,
@@ -605,6 +757,7 @@ export default function Page() {
     const entry: CheckinEntry = {
       id: generateId(),
       type: "checkin",
+      subcategory: null,
       text,
       category: inferCategoryFromTitleAndMemo(text, ""),
       checkedAt: nowIso,
@@ -682,6 +835,7 @@ export default function Page() {
     progress: number;
     deadline: Date | null;
     category: Category;
+    subcategory: string | null;
     important: boolean;
     alerts: TodoAlert[];
   }) => {
@@ -693,6 +847,7 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         progress: input.progress,
         status: "open",
         deadline: input.deadline ? toJstIso(input.deadline) : null,
@@ -718,6 +873,7 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         progress: input.progress,
         deadline: input.deadline ? toJstIso(input.deadline) : null,
         updatedAt: nowIso,
@@ -815,6 +971,7 @@ export default function Page() {
     deadlineDays: number;
     enabled: boolean;
     category: Category;
+    subcategory: string | null;
   }) => {
     if (!recurringForm) return;
     const nowIso = nowJstIso();
@@ -825,6 +982,7 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         frequency: input.frequency,
         dayOfMonth: input.dayOfMonth,
         monthOfYear: input.monthOfYear,
@@ -840,6 +998,7 @@ export default function Page() {
         title: input.title,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         frequency: input.frequency,
         dayOfMonth: input.dayOfMonth,
         monthOfYear: input.monthOfYear,
@@ -904,6 +1063,7 @@ export default function Page() {
         cancelUrl: input.cancelUrl,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         status: input.status,
         reviewEnabled: input.reviewEnabled,
         reviewDaysBefore: input.reviewDaysBefore,
@@ -924,6 +1084,7 @@ export default function Page() {
         cancelUrl: input.cancelUrl,
         memo: input.memo,
         category: input.category,
+        subcategory: input.subcategory,
         status: input.status,
         reviewEnabled: input.reviewEnabled,
         reviewDaysBefore: input.reviewDaysBefore,
@@ -999,6 +1160,7 @@ export default function Page() {
       id: generateId(),
       title: input.title,
       category: inferCategoryFromTitleAndMemo(input.title, input.memo),
+      subcategory: null,
       memo: input.memo,
       durationMinutes: input.durationMinutes,
       startedAt: nowIso,
@@ -1151,11 +1313,15 @@ export default function Page() {
                 className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
               />
               <CategorySelect
+                categories={categories}
                 value={taskCategory}
                 onChange={(c) => {
                   setTaskCategoryDirty(true);
                   setTaskCategory(c);
+                  setTaskSubcategory(null);
                 }}
+                subcategoryValue={taskSubcategory}
+                onSubcategoryChange={setTaskSubcategory}
               />
               <button
                 type="button"
@@ -1178,7 +1344,7 @@ export default function Page() {
                 {activeLog.task}
               </p>
               <p
-                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs ${CATEGORY_COLOR[activeLog.category]}`}
+                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs ${getCategoryColor(activeLog.category, categories)}`}
               >
                 {activeLog.category}
               </p>
@@ -1272,27 +1438,67 @@ export default function Page() {
         !recurringManageOpen &&
         !subscriptionManageOpen &&
         !countdownFormOpen &&
-        !timelineOpen && (
+        !timelineOpen &&
+        !aggregateOpen &&
+        !settingsOpen &&
+        !categoryManageOpen &&
+        !categoryForm && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
-            onExport={() => setBackupOpen(true)}
             onTimeline={() => {
               setTimelineOpen(true);
               setMenuOpen(false);
             }}
             onAddEvent={() => setEventOpen(true)}
             onListEvents={() => setEventListOpen(true)}
-            onManageRecurring={() => {
-              setRecurringManageOpen(true);
-              setMenuOpen(false);
-            }}
-            onManageSubscriptions={() => {
-              setSubscriptionManageOpen(true);
-              setMenuOpen(false);
+            onOpenAggregate={() => setAggregateOpen(true)}
+            onOpenSettings={() => {
+              setSettingsOpen(true);
             }}
             onDelete={() => setDeleteOpen(true)}
           />
         )}
+      {aggregateOpen && (
+        <AggregateModal
+          categories={categories}
+          logs={logs}
+          todos={todos}
+          onClose={() => setAggregateOpen(false)}
+        />
+      )}
+      {settingsOpen &&
+        !categoryManageOpen &&
+        !categoryForm &&
+        !recurringManageOpen &&
+        !subscriptionManageOpen &&
+        !backupOpen && (
+          <SettingsModal
+            onClose={() => setSettingsOpen(false)}
+            onManageCategories={() => setCategoryManageOpen(true)}
+            onManageRecurring={() => setRecurringManageOpen(true)}
+            onManageSubscriptions={() => setSubscriptionManageOpen(true)}
+            onBackup={() => setBackupOpen(true)}
+          />
+        )}
+      {categoryManageOpen && !categoryForm && (
+        <CategoryManageModal
+          categories={categories}
+          onClose={() => setCategoryManageOpen(false)}
+          onAdd={() => setCategoryForm({ mode: "add" })}
+          onEdit={(c) => setCategoryForm({ mode: "edit", item: c })}
+        />
+      )}
+      {categoryForm && (
+        <CategoryFormModal
+          initial={categoryForm.mode === "edit" ? categoryForm.item : null}
+          existingNames={categories.map((c) => c.name)}
+          onClose={() => setCategoryForm(null)}
+          onSubmit={handleCategorySubmit}
+          onDelete={
+            categoryForm.mode === "edit" ? handleCategoryDelete : undefined
+          }
+        />
+      )}
       {backupOpen && (
         <BackupModal
           onClose={() => setBackupOpen(false)}
@@ -1303,12 +1509,14 @@ export default function Page() {
       )}
       {pastOpen && (
         <PastLogModal
+          categories={categories}
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
         />
       )}
       {eventOpen && (
         <EventModal
+          categories={categories}
           onClose={() => setEventOpen(false)}
           onConfirm={handleAddEvent}
         />
@@ -1328,6 +1536,7 @@ export default function Page() {
       )}
       {editOpen && activeLog && (
         <EditActiveTaskModal
+          categories={categories}
           log={activeLog}
           onClose={() => setEditOpen(false)}
           onConfirm={handleEditActive}
@@ -1346,6 +1555,7 @@ export default function Page() {
       )}
       {todoForm && (
         <TodoFormModal
+          categories={categories}
           initial={todoForm.mode === "edit" ? todoForm.todo : null}
           onClose={() => setTodoForm(null)}
           onSubmit={handleTodoSubmit}
@@ -1374,6 +1584,7 @@ export default function Page() {
       )}
       {recurringForm && (
         <RecurringTodoFormModal
+          categories={categories}
           initial={recurringForm.mode === "edit" ? recurringForm.item : null}
           onClose={() => setRecurringForm(null)}
           onSubmit={handleRecurringSubmit}
@@ -1394,6 +1605,7 @@ export default function Page() {
       )}
       {subscriptionForm && (
         <SubscriptionFormModal
+          categories={categories}
           initial={
             subscriptionForm.mode === "edit" ? subscriptionForm.item : null
           }

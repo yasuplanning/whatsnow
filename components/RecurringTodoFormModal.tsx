@@ -6,10 +6,12 @@ import type { RecurringFrequency, RecurringTodo } from "@/lib/types";
 import {
   inferCategoryFromTitleAndMemo,
   type Category,
+  type CategoryDefinition,
 } from "@/lib/category";
 import CategorySelect from "./CategorySelect";
 
 interface Props {
+  categories: CategoryDefinition[];
   initial: RecurringTodo | null;
   onClose: () => void;
   onSubmit: (input: {
@@ -21,6 +23,7 @@ interface Props {
     deadlineDays: number;
     enabled: boolean;
     category: Category;
+    subcategory: string | null;
   }) => void;
   onDelete?: () => void;
 }
@@ -30,6 +33,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 const DEADLINE_OPTIONS = Array.from({ length: 31 }, (_, i) => i);
 
 export default function RecurringTodoFormModal({
+  categories,
   initial,
   onClose,
   onSubmit,
@@ -40,6 +44,9 @@ export default function RecurringTodoFormModal({
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
   const [category, setCategory] = useState<Category>(
     initial?.category ?? "その他"
+  );
+  const [subcategory, setSubcategory] = useState<string | null>(
+    initial?.subcategory ?? null
   );
   const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [frequency, setFrequency] = useState<RecurringFrequency>(
@@ -70,6 +77,7 @@ export default function RecurringTodoFormModal({
       deadlineDays,
       enabled,
       category,
+      subcategory,
     });
   };
 
@@ -123,11 +131,14 @@ export default function RecurringTodoFormModal({
         </div>
 
         <CategorySelect
+          categories={categories}
           value={category}
           onChange={(c) => {
             setCategoryDirty(true);
             setCategory(c);
           }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
         />
 
         <div className="space-y-2">

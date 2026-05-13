@@ -102,3 +102,13 @@ export function formatClock(iso: string | null): string {
 export function formatLocalDateKey(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
+
+export function formatTimestampForMemo(d: Date = new Date()): string {
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+export function appendTimestampLine(memo: string): string {
+  const stamp = `${formatTimestampForMemo()}: `;
+  if (!memo) return stamp;
+  return memo.endsWith("\n") ? `${memo}${stamp}` : `${memo}\n${stamp}`;
+}

@@ -4,9 +4,14 @@ import { useState } from "react";
 import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
-import { inferCategoryFromTitleAndMemo, type Category } from "@/lib/category";
+import {
+  inferCategoryFromTitleAndMemo,
+  type Category,
+  type CategoryDefinition,
+} from "@/lib/category";
 
 interface Props {
+  categories: CategoryDefinition[];
   onClose: () => void;
   onConfirm: (input: {
     task: string;
@@ -14,10 +19,15 @@ interface Props {
     endAt: Date;
     memo: string;
     category: Category;
+    subcategory: string | null;
   }) => void;
 }
 
-export default function PastLogModal({ onClose, onConfirm }: Props) {
+export default function PastLogModal({
+  categories,
+  onClose,
+  onConfirm,
+}: Props) {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const [task, setTask] = useState<string>("");
@@ -25,6 +35,7 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
   const [end, setEnd] = useState<string>(toDatetimeLocal(now));
   const [memo, setMemo] = useState<string>("");
   const [category, setCategory] = useState<Category>("その他");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
 
@@ -64,6 +75,7 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
       endAt: endDate,
       memo,
       category,
+      subcategory,
     });
   };
 
@@ -82,11 +94,14 @@ export default function PastLogModal({ onClose, onConfirm }: Props) {
         </div>
 
         <CategorySelect
+          categories={categories}
           value={category}
           onChange={(c) => {
             setCategoryDirty(true);
             setCategory(c);
           }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
         />
 
         <div className="grid grid-cols-1 gap-3">

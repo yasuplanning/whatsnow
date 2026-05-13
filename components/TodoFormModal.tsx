@@ -7,6 +7,7 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
 import {
   inferCategoryFromTitleAndMemo,
   type Category,
+  type CategoryDefinition,
 } from "@/lib/category";
 import CategorySelect from "./CategorySelect";
 
@@ -20,6 +21,7 @@ interface AlertDraft {
 }
 
 interface Props {
+  categories: CategoryDefinition[];
   initial: TodoItem | null;
   onClose: () => void;
   onSubmit: (input: {
@@ -28,6 +30,7 @@ interface Props {
     progress: number;
     deadline: Date | null;
     category: Category;
+    subcategory: string | null;
     important: boolean;
     alerts: TodoAlert[];
   }) => void;
@@ -71,6 +74,7 @@ function defaultDeadline(): Date {
 }
 
 export default function TodoFormModal({
+  categories,
   initial,
   onClose,
   onSubmit,
@@ -82,6 +86,9 @@ export default function TodoFormModal({
   const [memo, setMemo] = useState<string>(initial?.memo ?? "");
   const [category, setCategory] = useState<Category>(
     initial?.category ?? "その他"
+  );
+  const [subcategory, setSubcategory] = useState<string | null>(
+    initial?.subcategory ?? null
   );
   const [categoryDirty, setCategoryDirty] = useState<boolean>(isEdit);
   const [progress, setProgress] = useState<number>(() => {
@@ -172,6 +179,7 @@ export default function TodoFormModal({
       progress,
       deadline: deadlineDate,
       category,
+      subcategory,
       important,
       alerts: normalizedAlerts,
     });
@@ -233,11 +241,14 @@ export default function TodoFormModal({
         </div>
 
         <CategorySelect
+          categories={categories}
           value={category}
           onChange={(c) => {
             setCategoryDirty(true);
             setCategory(c);
           }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
         />
 
         <div className="space-y-2">

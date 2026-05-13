@@ -8,8 +8,10 @@ import type {
   Subscription,
   TodoItem,
 } from "./types";
+import type { CategoryDefinition } from "./category";
 import {
   getAllPhotos,
+  getCategoriesFromStorage,
   getCountdownTimers,
   getRecurringTodos,
   getSubscriptions,
@@ -50,6 +52,7 @@ interface DataPayload {
   recurringTodos: RecurringTodo[];
   countdowns: CountdownTimer[];
   subscriptions: Subscription[];
+  categories: CategoryDefinition[];
   lastActivityAt: string | null;
 }
 
@@ -99,6 +102,7 @@ export async function exportBackup(): Promise<ExportResult> {
   const recurringTodos = getRecurringTodos();
   const countdowns = getCountdownTimers();
   const subscriptions = getSubscriptions();
+  const categories = getCategoriesFromStorage();
   const lastActivityAt = loadLastActivityAt();
   const photos = getAllPhotos();
 
@@ -110,6 +114,7 @@ export async function exportBackup(): Promise<ExportResult> {
     recurringTodos,
     countdowns,
     subscriptions,
+    categories,
     lastActivityAt,
   };
 
@@ -180,6 +185,9 @@ function validateData(raw: unknown): DataPayload {
     recurringTodos: arr("recurringTodos") as RecurringTodo[],
     countdowns: arr("countdowns") as CountdownTimer[],
     subscriptions: arr("subscriptions") as Subscription[],
+    categories: Array.isArray(obj.categories)
+      ? (obj.categories as CategoryDefinition[])
+      : [],
     lastActivityAt:
       typeof obj.lastActivityAt === "string" ? obj.lastActivityAt : null,
   };
@@ -272,6 +280,7 @@ export async function importBackup(file: File): Promise<ImportPreview> {
     recurringTodos: data.recurringTodos,
     countdowns: data.countdowns,
     subscriptions: data.subscriptions,
+    categories: data.categories ?? [],
     lastActivityAt: data.lastActivityAt,
     photos,
   };

@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import Modal from "./Modal";
 import type { LogEntry, TodoAllocation, TodoItem } from "@/lib/types";
-import { diffMinutes, fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
+import {
+  appendTimestampLine,
+  diffMinutes,
+  fromDatetimeLocal,
+  toDatetimeLocal,
+} from "@/lib/time";
 import {
   getAllocationMinutes,
   getDurationMinutes,
@@ -238,7 +243,18 @@ export default function EditPastTaskModal({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm text-slate-300">メモ</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm text-slate-300">メモ</label>
+            <button
+              type="button"
+              onClick={() => setMemo((prev) => appendTimestampLine(prev))}
+              aria-label="タイムスタンプを挿入"
+              title="タイムスタンプを挿入"
+              className="rounded-md bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700"
+            >
+              <ClockIcon className="h-4 w-4" />
+            </button>
+          </div>
           <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
@@ -320,5 +336,23 @@ export default function EditPastTaskModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
   );
 }

@@ -25,6 +25,7 @@ function buildReviewTodo(
     createdAt: nowIso,
     updatedAt: nowIso,
     doneAt: null,
+    subcategory: sub.subcategory ?? null,
     recurringTodoId: null,
     recurringPeriodKey: null,
     subscriptionId: sub.id,

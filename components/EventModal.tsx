@@ -5,9 +5,14 @@ import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
 import { compressImageToDataUrl } from "@/lib/image";
-import { inferCategoryFromTitleAndMemo, type Category } from "@/lib/category";
+import {
+  inferCategoryFromTitleAndMemo,
+  type Category,
+  type CategoryDefinition,
+} from "@/lib/category";
 
 interface Props {
+  categories: CategoryDefinition[];
   onClose: () => void;
   onConfirm: (input: {
     content: string;
@@ -16,16 +21,22 @@ interface Props {
     memo: string;
     timestamp: Date;
     category: Category;
+    subcategory: string | null;
   }) => void;
 }
 
-export default function EventModal({ onClose, onConfirm }: Props) {
+export default function EventModal({
+  categories,
+  onClose,
+  onConfirm,
+}: Props) {
   const [content, setContent] = useState<string>("");
   const [timestamp, setTimestamp] = useState<string>(toDatetimeLocal(new Date()));
   const [memo, setMemo] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoSummary, setPhotoSummary] = useState<string>("");
   const [category, setCategory] = useState<Category>("その他");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
@@ -78,6 +89,7 @@ export default function EventModal({ onClose, onConfirm }: Props) {
       memo,
       timestamp: date,
       category,
+      subcategory,
     });
   };
 
@@ -96,11 +108,14 @@ export default function EventModal({ onClose, onConfirm }: Props) {
         </div>
 
         <CategorySelect
+          categories={categories}
           value={category}
           onChange={(c) => {
             setCategoryDirty(true);
             setCategory(c);
           }}
+          subcategoryValue={subcategory}
+          onSubcategoryChange={setSubcategory}
         />
 
         <div className="space-y-2">
