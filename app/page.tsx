@@ -544,14 +544,13 @@ export default function Page() {
 
   const handleRegisterClick = () => {
     const trimmed = task.trim();
-    if (!trimmed) return;
     void ensureNotificationPermission();
     const startAt = new Date();
     const nowIso = nowJstIso();
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
-      task: trimmed,
+      task: trimmed || "（未入力）",
       category: taskCategory,
       subcategory: taskSubcategory,
       durationMinutes: null,
@@ -1343,8 +1342,7 @@ export default function Page() {
               <button
                 type="button"
                 onClick={handleRegisterClick}
-                disabled={!task.trim()}
-                className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition hover:bg-sky-400"
               >
                 開始
               </button>
@@ -1425,7 +1423,7 @@ export default function Page() {
           </div>
         )}
 
-        {mounted && (
+        {mounted && activeLog && (
           <div className="pt-6">
             <button
               type="button"
