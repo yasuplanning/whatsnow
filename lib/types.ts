@@ -1,6 +1,6 @@
 import type { Category } from "./category";
 
-export type EntryType = "task" | "event" | "checkin";
+export type EntryType = "task" | "checkin";
 
 export type LogStatus = "active" | "completed";
 
@@ -28,22 +28,6 @@ export interface LogEntry {
   deductionMinutes: number;
   todoAllocations: TodoAllocation[];
   photoIds: string[];
-}
-
-export interface EventEntry {
-  id: string;
-  type: "event";
-  content: string;
-  category: Category;
-  subcategory: string | null;
-  timestamp: string;
-  photoId: string | null;
-  photoPath: string | null;
-  photoSummary: string | null;
-  memo: string;
-  createdAt: string;
-  updatedAt: string;
-  todoId?: string | null;
 }
 
 export interface CheckinEntry {

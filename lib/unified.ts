@@ -1,14 +1,13 @@
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   TodoItem,
 } from "./types";
 import type { Category } from "./category";
 import { diffMinutes } from "./time";
 
-export type UnifiedKind = "task" | "event" | "checkin" | "countdown" | "todoDone";
+export type UnifiedKind = "task" | "checkin" | "countdown" | "todoDone";
 
 export interface UnifiedLog {
   id: string;
@@ -55,31 +54,6 @@ export function taskToUnified(t: LogEntry): UnifiedLog {
     recurringTodoId: null,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
-  };
-}
-
-export function eventToUnified(e: EventEntry): UnifiedLog {
-  return {
-    id: e.id,
-    type: "event",
-    title: e.content,
-    category: e.category,
-    startAt: null,
-    endAt: null,
-    scheduledEndAt: null,
-    eventAt: e.timestamp || null,
-    checkinAt: null,
-    durationMinutes: null,
-    memo: e.memo,
-    status: "",
-    photoId: e.photoId,
-    photoPath: e.photoPath,
-    photoSummary: e.photoSummary,
-    todoId: e.todoId ?? null,
-    todoTitle: null,
-    recurringTodoId: null,
-    createdAt: e.createdAt,
-    updatedAt: e.updatedAt,
   };
 }
 

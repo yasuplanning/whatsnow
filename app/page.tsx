@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   RecurringTodo,
   Subscription,
@@ -21,7 +20,6 @@ import {
   clearAllCategories,
   clearAllCheckins,
   clearAllCountdownTimers,
-  clearAllEvents,
   clearAllLogs,
   clearAllRecurringTodos,
   clearAllSubscriptions,
@@ -41,10 +39,8 @@ import {
   getTodoById,
   getTodos,
   loadCheckins,
-  loadEvents,
   loadLastActivityAt,
   loadLogs,
-  removeEvent,
   removePhoto,
   reorderOpenTodos,
   getPhotoDataUrl,
@@ -52,7 +48,6 @@ import {
   saveCategories,
   saveCheckins,
   saveCountdownTimers,
-  saveEvents,
   saveLastActivityAt,
   saveLogs,
   saveRecurringTodos,
@@ -62,7 +57,6 @@ import {
   updateSubscription,
   updateTodo,
   upsertCheckin,
-  upsertEvent,
   upsertLog,
 } from "@/lib/storage";
 import { generateRecurringTodosForNow } from "@/lib/recurring";
@@ -97,8 +91,6 @@ import MenuModal from "@/components/MenuModal";
 import BackupModal from "@/components/BackupModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import PastLogModal from "@/components/PastLogModal";
-import EventModal from "@/components/EventModal";
-import EventListModal from "@/components/EventListModal";
 import CheckinModal from "@/components/CheckinModal";
 import TaskMemoModal from "@/components/TaskMemoModal";
 import EditActiveTaskModal from "@/components/EditActiveTaskModal";
@@ -147,7 +139,6 @@ type CategoryFormState =
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [events, setEvents] = useState<EventEntry[]>([]);
   const [checkins, setCheckins] = useState<CheckinEntry[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
@@ -164,8 +155,6 @@ export default function Page() {
   const [backupOpen, setBackupOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
-  const [eventOpen, setEventOpen] = useState(false);
-  const [eventListOpen, setEventListOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [taskMemoOpen, setTaskMemoOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -219,7 +208,6 @@ export default function Page() {
   const reloadAllFromStorage = useCallback(() => {
     const loaded = loadLogs();
     setLogs(loaded);
-    setEvents(loadEvents());
     setCheckins(loadCheckins());
     setCategories(getCategoriesFromStorage());
     const loadedTodos = getTodos();
@@ -376,11 +364,6 @@ export default function Page() {
     saveLogs(next);
   }, []);
 
-  const persistEvents = useCallback((next: EventEntry[]) => {
-    setEvents(next);
-    saveEvents(next);
-  }, []);
-
   const persistCheckins = useCallback((next: CheckinEntry[]) => {
     setCheckins(next);
     saveCheckins(next);
@@ -518,8 +501,6 @@ export default function Page() {
     };
     const nextLogs = logs.map(applyCat);
     if (nextLogs.some((l, i) => l !== logs[i])) persist(nextLogs);
-    const nextEvents = events.map(applyCat);
-    if (nextEvents.some((e, i) => e !== events[i])) persistEvents(nextEvents);
     const nextCheckins = checkins.map(applyCat);
     if (nextCheckins.some((c, i) => c !== checkins[i]))
       persistCheckins(nextCheckins);
@@ -688,7 +669,6 @@ export default function Page() {
 
   const handleDeleteAll = () => {
     clearAllLogs();
-    clearAllEvents();
     clearAllCheckins();
     clearAllTodos();
     clearAllRecurringTodos();
@@ -697,7 +677,6 @@ export default function Page() {
     clearAllCategories();
     clearLastActivityAt();
     setLogs([]);
-    setEvents([]);
     setCheckins([]);
     setTodos([]);
     setRecurringTodos([]);
@@ -748,48 +727,6 @@ export default function Page() {
     setPastOpen(false);
     setMenuOpen(false);
     markActivity();
-  };
-
-  const handleAddEvent = (input: {
-    content: string;
-    photoDataUrl: string | null;
-    photoSummary: string | null;
-    memo: string;
-    timestamp: Date;
-    category: Category;
-    subcategory: string | null;
-  }) => {
-    const nowIso = nowJstIso();
-    let photoId: string | null = null;
-    let photoPath: string | null = null;
-    if (input.photoDataUrl) {
-      const saved = savePhoto(input.photoDataUrl);
-      photoId = saved.photoId;
-      photoPath = saved.photoPath;
-    }
-    const entry: EventEntry = {
-      id: generateId(),
-      type: "event",
-      content: input.content,
-      category: input.category,
-      subcategory: input.subcategory,
-      photoId,
-      photoPath,
-      photoSummary: input.photoSummary,
-      memo: input.memo,
-      timestamp: toJstIso(input.timestamp),
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      todoId: null,
-    };
-    persistEvents(upsertEvent(events, entry));
-    setEventOpen(false);
-    setMenuOpen(false);
-    markActivity();
-  };
-
-  const handleDeleteEvent = (id: string) => {
-    persistEvents(removeEvent(events, id));
   };
 
   const handleAddCheckin = (text: string) => {
@@ -1564,8 +1501,6 @@ export default function Page() {
         !backupOpen &&
         !deleteOpen &&
         !pastOpen &&
-        !eventOpen &&
-        !eventListOpen &&
         !editOpen &&
         !todoManageOpen &&
         !recurringManageOpen &&
@@ -1582,8 +1517,6 @@ export default function Page() {
               setTimelineOpen(true);
               setMenuOpen(false);
             }}
-            onAddEvent={() => setEventOpen(true)}
-            onListEvents={() => setEventListOpen(true)}
             onOpenAggregate={() => setAggregateOpen(true)}
             onOpenSettings={() => {
               setSettingsOpen(true);
@@ -1657,21 +1590,6 @@ export default function Page() {
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
           onAddSubcategory={handleRequestAddSubcategory}
-        />
-      )}
-      {eventOpen && (
-        <EventModal
-          categories={categories}
-          onClose={() => setEventOpen(false)}
-          onConfirm={handleAddEvent}
-          onAddSubcategory={handleRequestAddSubcategory}
-        />
-      )}
-      {eventListOpen && (
-        <EventListModal
-          events={events}
-          onClose={() => setEventListOpen(false)}
-          onDelete={handleDeleteEvent}
         />
       )}
       {checkinOpen && (
@@ -1792,7 +1710,6 @@ export default function Page() {
       {timelineOpen && (
         <EventTimelineModal
           tasks={logs}
-          events={events}
           checkins={checkins}
           countdowns={timers}
           todos={todos}

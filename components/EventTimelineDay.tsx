@@ -4,19 +4,13 @@ import { useMemo, useState } from "react";
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   TodoItem,
 } from "@/lib/types";
 import type { Category } from "@/lib/category";
 import { CATEGORY_COLOR } from "@/lib/category";
 
-export type TimelineKind =
-  | "task"
-  | "event"
-  | "checkin"
-  | "countdown"
-  | "todoDone";
+export type TimelineKind = "task" | "checkin" | "countdown" | "todoDone";
 
 export interface TimelineItem {
   id: string;
@@ -31,15 +25,12 @@ export interface TimelineItem {
   durationMinutes: number | null;
   memo: string;
   status: string;
-  photoId: string | null;
-  photoPath: string | null;
-  photoSummary: string | null;
+  photoIds: string[];
 }
 
 interface Props {
   dateKey: string;
   tasks: LogEntry[];
-  events: EventEntry[];
   checkins: CheckinEntry[];
   countdowns: CountdownTimer[];
   todos: TodoItem[];
@@ -81,7 +72,6 @@ function clipRange(
 
 const KIND_COLORS: Record<TimelineKind, string> = {
   task: "bg-blue-100 text-blue-900 border-blue-300",
-  event: "bg-emerald-100 text-emerald-900 border-emerald-300",
   checkin: "bg-slate-200 text-slate-700 border-slate-300",
   countdown: "bg-purple-100 text-purple-900 border-purple-300",
   todoDone: "bg-orange-100 text-orange-900 border-orange-300",
@@ -89,7 +79,6 @@ const KIND_COLORS: Record<TimelineKind, string> = {
 
 const KIND_LABEL: Record<TimelineKind, string> = {
   task: "task",
-  event: "event",
   checkin: "checkin",
   countdown: "countdown",
   todoDone: "todo完了",
@@ -105,7 +94,6 @@ export function formatTimeHM(iso: string | null): string {
 function buildItems(
   dateKey: string,
   tasks: LogEntry[],
-  events: EventEntry[],
   checkins: CheckinEntry[],
   countdowns: CountdownTimer[],
   todos: TodoItem[]
@@ -133,9 +121,7 @@ function buildItems(
         durationMinutes: t.durationMinutes,
         memo: t.memo,
         status: t.status,
-        photoId: null,
-        photoPath: null,
-        photoSummary: null,
+        photoIds: t.photoIds,
       });
     } else if (s >= dayStart && s < dayEnd) {
       items.push({
@@ -151,33 +137,9 @@ function buildItems(
         durationMinutes: null,
         memo: t.memo,
         status: t.status,
-        photoId: null,
-        photoPath: null,
-        photoSummary: null,
+        photoIds: t.photoIds,
       });
     }
-  }
-
-  for (const e of events) {
-    const s = parseMs(e.timestamp);
-    if (s === null || s < dayStart || s >= dayEnd) continue;
-    items.push({
-      id: e.id,
-      kind: "event",
-      title: e.content,
-      category: e.category,
-      startIso: e.timestamp,
-      endIso: null,
-      startMs: s - dayStart,
-      endMs: s - dayStart,
-      isPoint: true,
-      durationMinutes: null,
-      memo: e.memo,
-      status: "",
-      photoId: e.photoId,
-      photoPath: e.photoPath,
-      photoSummary: e.photoSummary,
-    });
   }
 
   for (const c of checkins) {
@@ -196,9 +158,7 @@ function buildItems(
       durationMinutes: null,
       memo: "",
       status: "",
-      photoId: null,
-      photoPath: null,
-      photoSummary: null,
+      photoIds: [],
     });
   }
 
@@ -222,9 +182,7 @@ function buildItems(
         durationMinutes: dur,
         memo: c.memo,
         status: c.status,
-        photoId: null,
-        photoPath: null,
-        photoSummary: null,
+        photoIds: [],
       });
     } else if (s !== null && s >= dayStart && s < dayEnd) {
       items.push({
@@ -240,9 +198,7 @@ function buildItems(
         durationMinutes: null,
         memo: c.memo,
         status: c.status,
-        photoId: null,
-        photoPath: null,
-        photoSummary: null,
+        photoIds: [],
       });
     }
   }
@@ -264,9 +220,7 @@ function buildItems(
       durationMinutes: null,
       memo: t.memo,
       status: t.status,
-      photoId: null,
-      photoPath: null,
-      photoSummary: null,
+      photoIds: [],
     });
   }
 
@@ -326,7 +280,6 @@ interface Summary {
 function computeSummary(items: TimelineItem[]): Summary {
   const byKind: Record<TimelineKind, number> = {
     task: 0,
-    event: 0,
     checkin: 0,
     countdown: 0,
     todoDone: 0,
@@ -345,20 +298,18 @@ function computeSummary(items: TimelineItem[]): Summary {
 export default function EventTimelineDay({
   dateKey,
   tasks,
-  events,
   checkins,
   countdowns,
   todos,
   onSelect,
 }: Props) {
   const items = useMemo(
-    () => buildItems(dateKey, tasks, events, checkins, countdowns, todos),
-    [dateKey, tasks, events, checkins, countdowns, todos]
+    () => buildItems(dateKey, tasks, checkins, countdowns, todos),
+    [dateKey, tasks, checkins, countdowns, todos]
   );
   const totalSummary = useMemo(() => computeSummary(items), [items]);
   const [filters, setFilters] = useState<Record<TimelineKind, boolean>>({
     task: true,
-    event: true,
     checkin: true,
     countdown: true,
     todoDone: true,
@@ -390,7 +341,6 @@ export default function EventTimelineDay({
 
   const filterEntries: { kind: TimelineKind; label: string }[] = [
     { kind: "task", label: "task" },
-    { kind: "event", label: "event" },
     { kind: "checkin", label: "checkin" },
     { kind: "countdown", label: "countdown" },
     { kind: "todoDone", label: "todo完了" },
@@ -406,7 +356,6 @@ export default function EventTimelineDay({
               onClick={() =>
                 setFilters({
                   task: true,
-                  event: true,
                   checkin: true,
                   countdown: true,
                   todoDone: true,
@@ -421,7 +370,6 @@ export default function EventTimelineDay({
               onClick={() =>
                 setFilters({
                   task: false,
-                  event: false,
                   checkin: false,
                   countdown: false,
                   todoDone: false,

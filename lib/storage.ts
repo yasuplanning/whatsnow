@@ -1,7 +1,6 @@
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   PaymentCycle,
   RecurringTodo,
@@ -18,7 +17,6 @@ import {
 import { diffMinutes, migrateIsoToJst } from "./time";
 
 const STORAGE_KEY = "whatsnow.logs.v1";
-const EVENT_STORAGE_KEY = "whatsnow.events.v1";
 const CHECKIN_STORAGE_KEY = "whatsnow.checkins.v1";
 const LAST_ACTIVITY_KEY = "whatsnow.lastActivityAt.v1";
 const TODO_STORAGE_KEY = "whatsnow.todos.v1";
@@ -45,11 +43,15 @@ function ensureBackup(): void {
   backupAttempted = true;
   if (!isBrowser()) return;
   try {
+    window.localStorage.removeItem("whatsnow.events.v1");
+  } catch {
+    // ignore
+  }
+  try {
     if (window.localStorage.getItem(BACKUP_KEY)) return;
     const snapshot = {
       at: new Date().toISOString(),
       logs: window.localStorage.getItem(STORAGE_KEY),
-      events: window.localStorage.getItem(EVENT_STORAGE_KEY),
       checkins: window.localStorage.getItem(CHECKIN_STORAGE_KEY),
       countdowns: window.localStorage.getItem(COUNTDOWN_STORAGE_KEY),
       todos: window.localStorage.getItem(TODO_STORAGE_KEY),
@@ -58,7 +60,6 @@ function ensureBackup(): void {
     };
     const anyPresent =
       snapshot.logs ||
-      snapshot.events ||
       snapshot.checkins ||
       snapshot.countdowns ||
       snapshot.todos ||
@@ -244,55 +245,6 @@ function migrateLogEntry(raw: any): LogEntry {
     deductionMinutes,
     todoAllocations,
     photoIds,
-  };
-}
-
-function migrateEventEntry(raw: any): EventEntry {
-  const timestamp = migrateIsoToJst(raw?.timestamp) ?? "";
-  const createdAt = migrateIsoToJst(raw?.createdAt) ?? timestamp;
-  const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
-  const content = typeof raw?.content === "string" ? raw.content : "";
-  const memo = typeof raw?.memo === "string" ? raw.memo : "";
-  const category =
-    raw?.category !== undefined
-      ? normalizeCategory(raw.category)
-      : inferCategoryFromTitleAndMemo(content, memo);
-
-  let photoId: string | null =
-    typeof raw?.photoId === "string" ? raw.photoId : null;
-  let photoPath: string | null =
-    typeof raw?.photoPath === "string" ? raw.photoPath : null;
-  const photoSummary: string | null =
-    typeof raw?.photoSummary === "string" ? raw.photoSummary : null;
-
-  const legacyPhoto = raw?.photo;
-  if (
-    !photoId &&
-    typeof legacyPhoto === "string" &&
-    legacyPhoto.startsWith("data:")
-  ) {
-    const saved = savePhoto(legacyPhoto);
-    photoId = saved.photoId;
-    photoPath = saved.photoPath;
-  }
-  if (photoId && !photoPath) {
-    photoPath = `local://photos/${photoId}`;
-  }
-
-  return {
-    id: typeof raw?.id === "string" ? raw.id : generateId(),
-    type: "event",
-    content,
-    category,
-    subcategory: readSubcategory(raw),
-    timestamp,
-    photoId,
-    photoPath,
-    photoSummary,
-    memo,
-    createdAt,
-    updatedAt,
-    todoId: raw?.todoId ?? null,
   };
 }
 
@@ -508,37 +460,6 @@ export function clearAllLogs(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-export function loadEvents(): EventEntry[] {
-  return loadAndMigrate<EventEntry>(EVENT_STORAGE_KEY, migrateEventEntry);
-}
-
-export function saveEvents(events: EventEntry[]): void {
-  writeArray(EVENT_STORAGE_KEY, events);
-}
-
-export function upsertEvent(events: EventEntry[], entry: EventEntry): EventEntry[] {
-  const idx = events.findIndex((e) => e.id === entry.id);
-  if (idx === -1) return [...events, entry];
-  const next = events.slice();
-  next[idx] = entry;
-  return next;
-}
-
-export function removeEvent(events: EventEntry[], id: string): EventEntry[] {
-  const target = events.find((e) => e.id === id);
-  if (target?.photoId) removePhoto(target.photoId);
-  return events.filter((e) => e.id !== id);
-}
-
-export function clearAllEvents(): void {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.removeItem(EVENT_STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -978,7 +899,6 @@ export function clearAllCategories(): void {
 
 export interface BackupSnapshot {
   logs: LogEntry[];
-  events: EventEntry[];
   checkins: CheckinEntry[];
   todos: TodoItem[];
   recurringTodos: RecurringTodo[];
@@ -992,7 +912,6 @@ export interface BackupSnapshot {
 export function restoreAllData(snapshot: BackupSnapshot): void {
   if (!isBrowser()) return;
   saveLogs(snapshot.logs);
-  saveEvents(snapshot.events);
   saveCheckins(snapshot.checkins);
   saveTodos(snapshot.todos);
   saveRecurringTodos(snapshot.recurringTodos);

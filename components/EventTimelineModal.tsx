@@ -4,7 +4,6 @@ import { useState } from "react";
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   TodoItem,
 } from "@/lib/types";
@@ -23,7 +22,6 @@ import {
 
 interface Props {
   tasks: LogEntry[];
-  events: EventEntry[];
   checkins: CheckinEntry[];
   countdowns: CountdownTimer[];
   todos: TodoItem[];
@@ -53,9 +51,7 @@ function todoToTimelineItem(t: TodoItem): TimelineItem {
     durationMinutes: null,
     memo: t.memo,
     status: t.status,
-    photoId: null,
-    photoPath: null,
-    photoSummary: null,
+    photoIds: [],
   };
 }
 
@@ -73,15 +69,12 @@ function taskLogToTimelineItem(log: LogEntry): TimelineItem {
     durationMinutes: log.durationMinutes,
     memo: log.memo,
     status: log.status,
-    photoId: null,
-    photoPath: null,
-    photoSummary: null,
+    photoIds: log.photoIds,
   };
 }
 
 export default function EventTimelineModal({
   tasks,
-  events,
   checkins,
   countdowns,
   todos,
@@ -175,7 +168,6 @@ export default function EventTimelineModal({
           <EventTimelineDay
             dateKey={dateKey}
             tasks={tasks}
-            events={events}
             checkins={checkins}
             countdowns={countdowns}
             todos={todos}
@@ -293,7 +285,9 @@ function TimelineDetail({
   onClose: () => void;
   zIndexClass?: string;
 }) {
-  const photoDataUrl = getPhotoDataUrl(item.photoId);
+  const photos = item.photoIds
+    .map((id) => ({ id, dataUrl: getPhotoDataUrl(id) }))
+    .filter((p): p is { id: string; dataUrl: string } => p.dataUrl !== null);
   const [showContributors, setShowContributors] = useState(false);
   return (
     <div
@@ -433,21 +427,18 @@ function TimelineDetail({
             </ul>
           </div>
         )}
-        {photoDataUrl && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photoDataUrl}
-              alt={item.photoSummary ?? ""}
-              className="max-h-64 w-full rounded-lg object-contain"
-            />
-            {item.photoSummary && (
-              <p className="text-xs text-slate-500">{item.photoSummary}</p>
-            )}
-          </>
-        )}
-        {!photoDataUrl && item.photoPath && (
-          <p className="text-xs text-slate-500">photoPath: {item.photoPath}</p>
+        {photos.length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {photos.map((p) => (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                key={p.id}
+                src={p.dataUrl}
+                alt=""
+                className="max-h-48 w-full rounded-lg object-contain"
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>

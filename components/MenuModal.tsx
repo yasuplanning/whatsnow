@@ -5,8 +5,6 @@ import Modal from "./Modal";
 interface Props {
   onClose: () => void;
   onTimeline: () => void;
-  onAddEvent: () => void;
-  onListEvents: () => void;
   onOpenAggregate: () => void;
   onOpenSettings: () => void;
   onDelete: () => void;
@@ -15,8 +13,6 @@ interface Props {
 export default function MenuModal({
   onClose,
   onTimeline,
-  onAddEvent,
-  onListEvents,
   onOpenAggregate,
   onOpenSettings,
   onDelete,
@@ -30,20 +26,6 @@ export default function MenuModal({
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
           過去ログ
-        </button>
-        <button
-          type="button"
-          onClick={onAddEvent}
-          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
-        >
-          イベントを追加
-        </button>
-        <button
-          type="button"
-          onClick={onListEvents}
-          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
-        >
-          イベント一覧
         </button>
         <button
           type="button"

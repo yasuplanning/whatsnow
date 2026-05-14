@@ -2,7 +2,6 @@ import JSZip from "jszip";
 import type {
   CheckinEntry,
   CountdownTimer,
-  EventEntry,
   LogEntry,
   RecurringTodo,
   Subscription,
@@ -17,7 +16,6 @@ import {
   getSubscriptions,
   getTodos,
   loadCheckins,
-  loadEvents,
   loadLastActivityAt,
   loadLogs,
   restoreAllData,
@@ -34,7 +32,6 @@ interface Manifest {
   exportedAt: string;
   counts: {
     logs: number;
-    events: number;
     checkins: number;
     todos: number;
     recurringTodos: number;
@@ -46,7 +43,6 @@ interface Manifest {
 
 interface DataPayload {
   logs: LogEntry[];
-  events: EventEntry[];
   checkins: CheckinEntry[];
   todos: TodoItem[];
   recurringTodos: RecurringTodo[];
@@ -96,7 +92,6 @@ export interface ExportResult {
 
 export async function exportBackup(): Promise<ExportResult> {
   const logs = loadLogs();
-  const events = loadEvents();
   const checkins = loadCheckins();
   const todos = getTodos();
   const recurringTodos = getRecurringTodos();
@@ -108,7 +103,6 @@ export async function exportBackup(): Promise<ExportResult> {
 
   const data: DataPayload = {
     logs,
-    events,
     checkins,
     todos,
     recurringTodos,
@@ -124,7 +118,6 @@ export async function exportBackup(): Promise<ExportResult> {
     exportedAt: nowJstIso(),
     counts: {
       logs: logs.length,
-      events: events.length,
       checkins: checkins.length,
       todos: todos.length,
       recurringTodos: recurringTodos.length,
@@ -179,7 +172,6 @@ function validateData(raw: unknown): DataPayload {
   };
   return {
     logs: arr("logs") as LogEntry[],
-    events: arr("events") as EventEntry[],
     checkins: arr("checkins") as CheckinEntry[],
     todos: arr("todos") as TodoItem[],
     recurringTodos: arr("recurringTodos") as RecurringTodo[],
@@ -274,7 +266,6 @@ export async function importBackup(file: File): Promise<ImportPreview> {
 
   const snapshot: BackupSnapshot = {
     logs: data.logs,
-    events: data.events,
     checkins: data.checkins,
     todos: data.todos,
     recurringTodos: data.recurringTodos,
