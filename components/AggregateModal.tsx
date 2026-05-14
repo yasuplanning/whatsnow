@@ -55,9 +55,9 @@ function formatMinutes(m: number): string {
   return min === 0 ? `${h}時間` : `${h}時間${min}分`;
 }
 
-function daysAgoKey(days: number): string {
+function daysFromTodayKey(days: number): string {
   const d = new Date();
-  d.setDate(d.getDate() - days);
+  d.setDate(d.getDate() + days);
   return formatLocalDateKey(d);
 }
 
@@ -68,10 +68,10 @@ export default function AggregateModal({
   onClose,
 }: Props) {
   const todayKey = formatLocalDateKey(new Date());
-  const [mode, setMode] = useState<Mode>("task");
+  const [mode, setMode] = useState<Mode>("todo");
   const [categoryName, setCategoryName] = useState<string>(ALL);
-  const [startDate, setStartDate] = useState<string>(daysAgoKey(30));
-  const [endDate, setEndDate] = useState<string>(todayKey);
+  const [startDate, setStartDate] = useState<string>(todayKey);
+  const [endDate, setEndDate] = useState<string>(daysFromTodayKey(1));
   const [shown, setShown] = useState<boolean>(false);
 
   const result = useMemo<Result | null>(() => {
