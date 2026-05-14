@@ -27,6 +27,7 @@ export interface LogEntry {
   todoIds: string[];
   deductionMinutes: number;
   todoAllocations: TodoAllocation[];
+  photoIds: string[];
 }
 
 export interface EventEntry {

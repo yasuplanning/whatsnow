@@ -222,6 +222,9 @@ function migrateLogEntry(raw: any): LogEntry {
       (a: { todoId: string; ratio: number } | null): a is { todoId: string; ratio: number } =>
         a !== null
     );
+  const photoIds = Array.isArray(raw?.photoIds)
+    ? raw.photoIds.filter((v: unknown): v is string => typeof v === "string")
+    : [];
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     type: "task",
@@ -240,6 +243,7 @@ function migrateLogEntry(raw: any): LogEntry {
     todoIds,
     deductionMinutes,
     todoAllocations,
+    photoIds,
   };
 }
 

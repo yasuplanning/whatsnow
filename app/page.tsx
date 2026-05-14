@@ -45,7 +45,9 @@ import {
   loadLastActivityAt,
   loadLogs,
   removeEvent,
+  removePhoto,
   reorderOpenTodos,
+  getPhotoDataUrl,
   savePhoto,
   saveCategories,
   saveCheckins,
@@ -80,6 +82,7 @@ import {
   toJstIso,
 } from "@/lib/time";
 import { normalizeAllocations } from "@/lib/allocation";
+import { compressImageToDataUrl } from "@/lib/image";
 import {
   inferCategoryFromTitleAndMemo,
   getCategoryColor,
@@ -97,6 +100,7 @@ import PastLogModal from "@/components/PastLogModal";
 import EventModal from "@/components/EventModal";
 import EventListModal from "@/components/EventListModal";
 import CheckinModal from "@/components/CheckinModal";
+import TaskMemoModal from "@/components/TaskMemoModal";
 import EditActiveTaskModal from "@/components/EditActiveTaskModal";
 import TodoManageModal from "@/components/TodoManageModal";
 import TodoFormModal from "@/components/TodoFormModal";
@@ -163,7 +167,9 @@ export default function Page() {
   const [eventOpen, setEventOpen] = useState(false);
   const [eventListOpen, setEventListOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [taskMemoOpen, setTaskMemoOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [todoManageOpen, setTodoManageOpen] = useState(false);
   const [todoForm, setTodoForm] = useState<TodoFormState | null>(null);
   const [todoFollowupQueue, setTodoFollowupQueue] = useState<string[]>([]);
@@ -565,6 +571,7 @@ export default function Page() {
       todoIds: [...pendingTodoIds],
       deductionMinutes: 0,
       todoAllocations: normalizeAllocations(pendingTodoIds, []),
+      photoIds: [],
     };
     persist(upsertLog(logs, entry));
     setTask("");
@@ -621,7 +628,6 @@ export default function Page() {
     task: string;
     startAt: Date;
     plannedEndAt: Date | null;
-    memo: string;
     category: Category;
     subcategory: string | null;
   }) => {
@@ -636,7 +642,6 @@ export default function Page() {
       task: input.task,
       startAt: startAtIso,
       plannedEndAt: plannedEndAtIso,
-      memo: input.memo,
       category: input.category,
       subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, activeLog.endAt),
@@ -654,10 +659,15 @@ export default function Page() {
     }
     const nowIso = nowJstIso();
     const endAtIso = toJstIso(endAt);
+    const mergedMemo = memo
+      ? activeLog.memo
+        ? `${activeLog.memo}${activeLog.memo.endsWith("\n") ? "" : "\n"}${memo}`
+        : memo
+      : activeLog.memo;
     const updated: LogEntry = {
       ...activeLog,
       endAt: endAtIso,
-      memo,
+      memo: mergedMemo,
       status: "completed",
       durationMinutes: diffMinutes(activeLog.startAt, endAtIso),
       updatedAt: nowIso,
@@ -732,6 +742,7 @@ export default function Page() {
       todoIds: [],
       deductionMinutes: 0,
       todoAllocations: [],
+      photoIds: [],
     };
     persist(upsertLog(logs, entry));
     setPastOpen(false);
@@ -801,6 +812,55 @@ export default function Page() {
   const openCheckin = () => {
     void ensureNotificationPermission();
     setCheckinOpen(true);
+  };
+
+  const handleAddTaskMemo = (text: string) => {
+    if (!activeLog) {
+      setTaskMemoOpen(false);
+      return;
+    }
+    const nowIso = nowJstIso();
+    const nextMemo = activeLog.memo
+      ? `${activeLog.memo}${activeLog.memo.endsWith("\n") ? "" : "\n"}${text}`
+      : text;
+    const updated: LogEntry = {
+      ...activeLog,
+      memo: nextMemo,
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
+    setTaskMemoOpen(false);
+    markActivity();
+  };
+
+  const handlePhotoFile = async (file: File | null) => {
+    if (!file || !activeLog) return;
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      const { photoId } = savePhoto(dataUrl);
+      const nowIso = nowJstIso();
+      const updated: LogEntry = {
+        ...activeLog,
+        photoIds: [...activeLog.photoIds, photoId],
+        updatedAt: nowIso,
+      };
+      persist(upsertLog(logs, updated));
+      markActivity();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRemoveTaskPhoto = (photoId: string) => {
+    if (!activeLog) return;
+    removePhoto(photoId);
+    const nowIso = nowJstIso();
+    const updated: LogEntry = {
+      ...activeLog,
+      photoIds: activeLog.photoIds.filter((p) => p !== photoId),
+      updatedAt: nowIso,
+    };
+    persist(upsertLog(logs, updated));
   };
 
   const handleQuickPickTodo = (todo: TodoItem) => {
@@ -1252,6 +1312,16 @@ export default function Page() {
       .filter((t): t is TodoItem => t !== null);
   }, [activeLog, todos]);
 
+  const activeLogPhotos = useMemo(() => {
+    if (!activeLog) return [] as { id: string; dataUrl: string }[];
+    return activeLog.photoIds
+      .map((id) => {
+        const dataUrl = getPhotoDataUrl(id);
+        return dataUrl ? { id, dataUrl } : null;
+      })
+      .filter((p): p is { id: string; dataUrl: string } => p !== null);
+  }, [activeLog]);
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-end gap-2 px-4 py-3">
@@ -1384,6 +1454,33 @@ export default function Page() {
                   ))}
                 </ul>
               )}
+              {activeLogPhotos.length > 0 && (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {activeLogPhotos.map((p) => (
+                    <div key={p.id} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.dataUrl}
+                        alt="task photo"
+                        className="h-24 w-full rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTaskPhoto(p.id)}
+                        aria-label="写真を削除"
+                        className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-xs text-white hover:bg-black/80"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {activeLog.memo && (
+                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-200">
+                  {activeLog.memo}
+                </p>
+              )}
             </div>
 
             <dl className="space-y-3 rounded-2xl bg-slate-800 p-5 text-base">
@@ -1425,13 +1522,34 @@ export default function Page() {
 
         {mounted && activeLog && (
           <div className="pt-6">
-            <button
-              type="button"
-              onClick={openCheckin}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
-            >
-              今何をしているかメモ
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTaskMemoOpen(true)}
+                className="rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
+              >
+                メモ
+              </button>
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
+              >
+                写真
+              </button>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                void handlePhotoFile(f);
+                e.target.value = "";
+              }}
+              className="hidden"
+            />
           </div>
         )}
       </section>
@@ -1560,6 +1678,12 @@ export default function Page() {
         <CheckinModal
           onClose={() => setCheckinOpen(false)}
           onConfirm={handleAddCheckin}
+        />
+      )}
+      {taskMemoOpen && (
+        <TaskMemoModal
+          onClose={() => setTaskMemoOpen(false)}
+          onConfirm={handleAddTaskMemo}
         />
       )}
       {editOpen && activeLog && (

@@ -4,11 +4,7 @@ import { useState } from "react";
 import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import type { LogEntry } from "@/lib/types";
-import {
-  appendTimestampLine,
-  fromDatetimeLocal,
-  toDatetimeLocal,
-} from "@/lib/time";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
 import type { Category, CategoryDefinition } from "@/lib/category";
 
 interface Props {
@@ -19,7 +15,6 @@ interface Props {
     task: string;
     startAt: Date;
     plannedEndAt: Date | null;
-    memo: string;
     category: Category;
     subcategory: string | null;
   }) => void;
@@ -46,7 +41,6 @@ export default function EditActiveTaskModal({
       ? toDatetimeLocal(new Date(log.plannedEndAt))
       : toDatetimeLocal(fallbackPlanned)
   );
-  const [memo, setMemo] = useState<string>(log.memo);
   const [category, setCategory] = useState<Category>(log.category);
   const [subcategory, setSubcategory] = useState<string | null>(
     log.subcategory ?? null
@@ -80,7 +74,6 @@ export default function EditActiveTaskModal({
       task: trimmedTask,
       startAt: startDate,
       plannedEndAt: plannedEndDate,
-      memo,
       category,
       subcategory,
     });
@@ -157,27 +150,6 @@ export default function EditActiveTaskModal({
           )}
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm text-slate-300">メモ（任意）</label>
-            <button
-              type="button"
-              onClick={() => setMemo((prev) => appendTimestampLine(prev))}
-              aria-label="タイムスタンプを挿入"
-              title="タイムスタンプを挿入"
-              className="rounded-md bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700"
-            >
-              <ClockIcon className="h-4 w-4" />
-            </button>
-          </div>
-          <textarea
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
-          />
-        </div>
-
         {error && <p className="text-sm text-rose-400">{error}</p>}
 
         <button
@@ -192,20 +164,3 @@ export default function EditActiveTaskModal({
   );
 }
 
-function ClockIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
