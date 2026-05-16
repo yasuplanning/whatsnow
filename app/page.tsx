@@ -1584,7 +1584,7 @@ export default function Page() {
                 {formatCategoryLabel(activeLog.category, activeLog.subcategory)}
               </p>
 
-              <div className="relative rounded-xl bg-slate-900 p-4">
+              <div className="relative rounded-xl bg-slate-900 p-4 pt-10">
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
@@ -1615,28 +1615,22 @@ export default function Page() {
               </div>
 
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setTaskMemoOpen(true)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
-                >
-                  メモ
-                </button>
-                {activeLog.memo && (
-                  <p className="whitespace-pre-wrap break-words rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-200">
-                    {activeLog.memo}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
-                >
-                  写真
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
+                  >
+                    写真
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskMemoOpen(true)}
+                    className="rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
+                  >
+                    メモ
+                  </button>
+                </div>
                 {activeLogPhotos.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
                     {activeLogPhotos.map((p) => (
@@ -1658,6 +1652,11 @@ export default function Page() {
                       </div>
                     ))}
                   </div>
+                )}
+                {activeLog.memo && (
+                  <p className="whitespace-pre-wrap break-words rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-200">
+                    {activeLog.memo}
+                  </p>
                 )}
                 <input
                   ref={photoInputRef}
