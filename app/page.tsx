@@ -115,6 +115,7 @@ import SubscriptionFormModal, {
   type SubmitInput as SubscriptionSubmitInput,
 } from "@/components/SubscriptionFormModal";
 import SyncStatusBanner from "@/components/SyncStatusBanner";
+import QuickStartConfirmModal from "@/components/QuickStartConfirmModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -197,8 +198,23 @@ export default function Page() {
     useState<SubscriptionFormState | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const [photoBust, setPhotoBust] = useState<number>(0);
+  const [quickStartCategory, setQuickStartCategory] = useState<Category | null>(
+    null
+  );
+  const [quickStartSubcategory, setQuickStartSubcategory] = useState<
+    string | null
+  >(null);
+  const [quickStartConfirmOpen, setQuickStartConfirmOpen] = useState(false);
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
+
+  const quickStartCategoryDef = useMemo(
+    () =>
+      quickStartCategory
+        ? categories.find((c) => c.name === quickStartCategory) ?? null
+        : null,
+    [categories, quickStartCategory]
+  );
 
   const activeLog = useMemo(() => findActiveLog(logs), [logs]);
   const pendingTodos = useMemo(
@@ -270,6 +286,16 @@ export default function Page() {
       setPhotoBust((b) => b + 1);
     });
   }, []);
+
+  useEffect(() => {
+    if (
+      quickStartCategory &&
+      quickStartSubcategory &&
+      !quickStartConfirmOpen
+    ) {
+      setQuickStartConfirmOpen(true);
+    }
+  }, [quickStartCategory, quickStartSubcategory, quickStartConfirmOpen]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -580,6 +606,65 @@ export default function Page() {
     setTaskSubcategory(null);
     setTaskCategoryDirty(false);
     setPendingTodoIds([]);
+    setPhase({ kind: "active" });
+    markActivity();
+  };
+
+  const cancelQuickStart = () => {
+    setQuickStartConfirmOpen(false);
+    setQuickStartCategory(null);
+    setQuickStartSubcategory(null);
+  };
+
+  const confirmQuickStart = () => {
+    if (!quickStartCategory || !quickStartSubcategory) {
+      cancelQuickStart();
+      return;
+    }
+    const title = `${quickStartCategory} / ${quickStartSubcategory}`;
+    const nowIso = nowJstIso();
+    void ensureNotificationPermission();
+    const newTodo: TodoItem = {
+      id: generateId(),
+      title,
+      memo: "",
+      category: quickStartCategory,
+      subcategory: quickStartSubcategory,
+      progress: 0,
+      status: "open",
+      deadline: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      doneAt: null,
+      important: false,
+      alerts: [],
+    };
+    const nextTodos = addTodo(todos, newTodo);
+    persistTodos(nextTodos);
+    const entry: LogEntry = {
+      id: generateId(),
+      type: "task",
+      task: title,
+      category: quickStartCategory,
+      subcategory: quickStartSubcategory,
+      durationMinutes: null,
+      startAt: nowIso,
+      plannedEndAt: null,
+      endAt: null,
+      memo: "",
+      status: "active",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      todoId: newTodo.id,
+      todoIds: [newTodo.id],
+      deductionMinutes: 0,
+      todoAllocations: normalizeAllocations([newTodo.id], []),
+      photoIds: [],
+    };
+    persist(upsertLog(logs, entry));
+    setQuickStartConfirmOpen(false);
+    setQuickStartCategory(null);
+    setQuickStartSubcategory(null);
     setPhase({ kind: "active" });
     markActivity();
   };
@@ -1322,6 +1407,53 @@ export default function Page() {
               <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
                 what are you doing now?
               </h1>
+
+              <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
+                <p className="text-xs text-slate-400">
+                  クイック開始（カテゴリとサブカテゴリを選ぶと自動で ToDo を作成して開始）
+                </p>
+                <select
+                  value={quickStartCategory ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setQuickStartCategory(v === "" ? null : v);
+                    setQuickStartSubcategory(null);
+                  }}
+                  className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                >
+                  <option value="">カテゴリを選択...</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                {quickStartCategoryDef &&
+                  quickStartCategoryDef.subcategories.length > 0 && (
+                    <select
+                      value={quickStartSubcategory ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setQuickStartSubcategory(v === "" ? null : v);
+                      }}
+                      className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                    >
+                      <option value="">サブカテゴリを選択...</option>
+                      {quickStartCategoryDef.subcategories.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                {quickStartCategoryDef &&
+                  quickStartCategoryDef.subcategories.length === 0 && (
+                    <p className="text-xs text-slate-500">
+                      このカテゴリにはサブカテゴリがありません。下のフォームから開始してください。
+                    </p>
+                  )}
+              </div>
+
               {pendingTodos.length > 0 && (
                 <div className="space-y-2 rounded-xl bg-sky-900/40 px-3 py-2 text-sm">
                   <p className="text-sky-300">
@@ -1772,6 +1904,16 @@ export default function Page() {
           onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
+      {quickStartConfirmOpen &&
+        quickStartCategory &&
+        quickStartSubcategory && (
+          <QuickStartConfirmModal
+            category={quickStartCategory}
+            subcategory={quickStartSubcategory}
+            onConfirm={confirmQuickStart}
+            onCancel={cancelQuickStart}
+          />
+        )}
     </main>
   );
 }
