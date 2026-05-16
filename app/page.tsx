@@ -306,14 +306,17 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (
-      quickStartCategory &&
-      quickStartSubcategory &&
-      !quickStartConfirmOpen
-    ) {
+    if (!quickStartCategory || quickStartConfirmOpen) return;
+    const hasSub = (quickStartCategoryDef?.subcategories.length ?? 0) > 0;
+    if (hasSub ? !!quickStartSubcategory : true) {
       setQuickStartConfirmOpen(true);
     }
-  }, [quickStartCategory, quickStartSubcategory, quickStartConfirmOpen]);
+  }, [
+    quickStartCategory,
+    quickStartSubcategory,
+    quickStartConfirmOpen,
+    quickStartCategoryDef,
+  ]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -753,19 +756,21 @@ export default function Page() {
     markActivity();
   };
 
-  const confirmQuickStart = () => {
-    if (!quickStartCategory || !quickStartSubcategory) {
-      cancelQuickStart();
-      return;
-    }
-    const title = `${quickStartCategory} / ${quickStartSubcategory}`;
+  const buildQuickStartTodo = (): TodoItem | null => {
+    if (!quickStartCategory) return null;
+    const hasSub = (quickStartCategoryDef?.subcategories.length ?? 0) > 0;
+    if (hasSub && !quickStartSubcategory) return null;
+    const title =
+      hasSub && quickStartSubcategory
+        ? `${quickStartCategory} / ${quickStartSubcategory}`
+        : quickStartCategory;
     const nowIso = nowJstIso();
-    const newTodo: TodoItem = {
+    return {
       id: generateId(),
       title,
       memo: "",
       category: quickStartCategory,
-      subcategory: quickStartSubcategory,
+      subcategory: hasSub ? quickStartSubcategory : null,
       progress: 0,
       status: "open",
       deadline: null,
@@ -775,8 +780,29 @@ export default function Page() {
       important: false,
       alerts: [],
     };
+  };
+
+  const confirmQuickStart = () => {
+    const newTodo = buildQuickStartTodo();
+    if (!newTodo) {
+      cancelQuickStart();
+      return;
+    }
     persistTodos(addTodo(todos, newTodo));
     startTaskLinkedToTodo(newTodo);
+    setQuickStartConfirmOpen(false);
+    setQuickStartCategory(null);
+    setQuickStartSubcategory(null);
+  };
+
+  // "No, just save the ToDo" path: persist the ToDo but do not start a log.
+  const saveQuickStartTodoOnly = () => {
+    const newTodo = buildQuickStartTodo();
+    if (!newTodo) {
+      cancelQuickStart();
+      return;
+    }
+    persistTodos(addTodo(todos, newTodo));
     setQuickStartConfirmOpen(false);
     setQuickStartCategory(null);
     setQuickStartSubcategory(null);
@@ -1446,9 +1472,21 @@ export default function Page() {
 
   const quickStartSection = (
     <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
-      <p className="text-base text-slate-200">TODO作成</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-base text-slate-200">TODO作成</p>
+        {mounted && (
+          <button
+            type="button"
+            onClick={() => setTodoManageOpen(true)}
+            aria-label="ToDo一覧"
+            className="rounded-md bg-slate-900 p-1.5 text-slate-200 hover:bg-slate-700"
+          >
+            <TodoIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
       <p className="text-xs text-slate-400">
-        カテゴリとサブカテゴリを選ぶと自動で ToDo を作成して開始
+        カテゴリ（とサブカテゴリ）を選ぶと自動で ToDo を作成して開始
       </p>
       <select
         value={quickStartCategory ?? ""}
@@ -1507,16 +1545,6 @@ export default function Page() {
             className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
           >
             <StopwatchIcon className="h-5 w-5" />
-          </button>
-        )}
-        {mounted && (
-          <button
-            type="button"
-            onClick={() => setTodoManageOpen(true)}
-            aria-label="ToDo"
-            className="rounded-xl bg-slate-800 p-2 text-slate-100 hover:bg-slate-700"
-          >
-            <TodoIcon className="h-5 w-5" />
           </button>
         )}
         <button
@@ -2020,17 +2048,16 @@ export default function Page() {
           onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
-      {quickStartConfirmOpen &&
-        quickStartCategory &&
-        quickStartSubcategory && (
-          <QuickStartConfirmModal
-            category={quickStartCategory}
-            subcategory={quickStartSubcategory}
-            endingActiveTaskTitle={activeLog?.category ?? null}
-            onConfirm={confirmQuickStart}
-            onCancel={cancelQuickStart}
-          />
-        )}
+      {quickStartConfirmOpen && quickStartCategory && (
+        <QuickStartConfirmModal
+          category={quickStartCategory}
+          subcategory={quickStartSubcategory}
+          endingActiveTaskTitle={activeLog?.category ?? null}
+          onConfirm={confirmQuickStart}
+          onSaveOnly={saveQuickStartTodoOnly}
+          onCancel={cancelQuickStart}
+        />
+      )}
     </main>
   );
 }
