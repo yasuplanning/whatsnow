@@ -574,17 +574,25 @@ export default function Page() {
     }
   };
 
-  const handleRegisterClick = () => {
+  const handleRegisterClick = (override?: {
+    category?: Category;
+    subcategory?: string | null;
+  }) => {
     const trimmed = task.trim();
     void ensureNotificationPermission();
     const startAt = new Date();
     const nowIso = nowJstIso();
+    const category = override?.category ?? taskCategory;
+    const subcategory =
+      override?.subcategory !== undefined
+        ? override.subcategory
+        : taskSubcategory;
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
       task: trimmed || "（未入力）",
-      category: taskCategory,
-      subcategory: taskSubcategory,
+      category,
+      subcategory,
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -1506,23 +1514,37 @@ export default function Page() {
                   </button>
                 </div>
               )}
-              <textarea
-                value={task}
-                onChange={(e) => handleTaskChange(e.target.value)}
-                placeholder="例: 資料作成、皿洗い、移動など"
-                rows={6}
-                className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
-              />
-              <div className="space-y-2">
-                <label className="block text-sm text-slate-300">カテゴリ</label>
+              <div className="space-y-3 rounded-2xl bg-slate-800 p-4">
+                <p className="text-base text-slate-200">タスク作成</p>
+                <p className="text-xs text-slate-400">
+                  内容を入力し、カテゴリを選ぶと開始
+                </p>
+                <textarea
+                  value={task}
+                  onChange={(e) => handleTaskChange(e.target.value)}
+                  placeholder="例: 資料作成、皿洗い、移動など"
+                  rows={6}
+                  className="w-full resize-none rounded-xl bg-slate-900 px-4 py-4 text-lg text-white placeholder:text-slate-500"
+                />
                 <div className="flex flex-wrap gap-2">
                   {categories.map((c) => {
-                    const selected = taskCategory === c.name;
+                    const selected =
+                      taskCategoryDirty && taskCategory === c.name;
                     return (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => {
+                          if (c.subcategories.length === 0) {
+                            setTaskCategoryDirty(true);
+                            setTaskCategory(c.name);
+                            setTaskSubcategory(null);
+                            handleRegisterClick({
+                              category: c.name,
+                              subcategory: null,
+                            });
+                            return;
+                          }
                           setTaskCategoryDirty(true);
                           setTaskCategory(c.name);
                           setTaskSubcategory(null);
@@ -1532,7 +1554,7 @@ export default function Page() {
                           categories
                         )} ${
                           selected
-                            ? "ring-2 ring-white ring-offset-2 ring-offset-slate-950"
+                            ? "ring-2 ring-white ring-offset-2 ring-offset-slate-800"
                             : "opacity-80 hover:opacity-100"
                         }`}
                       >
@@ -1541,37 +1563,38 @@ export default function Page() {
                     );
                   })}
                 </div>
-                {(() => {
-                  const def =
-                    categories.find((c) => c.name === taskCategory) ?? null;
-                  if (!def || def.subcategories.length === 0) return null;
-                  return (
-                    <select
-                      value={taskSubcategory ?? ""}
-                      onChange={(e) =>
-                        setTaskSubcategory(
-                          e.target.value === "" ? null : e.target.value
-                        )
-                      }
-                      className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
-                    >
-                      <option value="">サブカテゴリなし</option>
-                      {def.subcategories.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                })()}
+                {taskCategoryDirty &&
+                  (() => {
+                    const def =
+                      categories.find((c) => c.name === taskCategory) ?? null;
+                    if (!def || def.subcategories.length === 0) return null;
+                    return (
+                      <select
+                        value={taskSubcategory ?? ""}
+                        onChange={(e) =>
+                          setTaskSubcategory(
+                            e.target.value === "" ? null : e.target.value
+                          )
+                        }
+                        className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                      >
+                        <option value="">サブカテゴリなし</option>
+                        {def.subcategories.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
+                <button
+                  type="button"
+                  onClick={() => handleRegisterClick()}
+                  className="w-full rounded-xl bg-sky-500 py-4 text-xl font-bold text-white transition hover:bg-sky-400"
+                >
+                  開始
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleRegisterClick}
-                className="w-full rounded-2xl bg-sky-500 py-5 text-xl font-bold text-white transition hover:bg-sky-400"
-              >
-                開始
-              </button>
             </div>
           )}
 
