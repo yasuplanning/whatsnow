@@ -16,7 +16,7 @@ export default function QuickStartConfirmModal({
   onCancel,
 }: Props) {
   return (
-    <Modal title="クイック開始" onClose={onCancel}>
+    <Modal title="TODO作成" onClose={onCancel}>
       <div className="space-y-4">
         <p className="text-sm text-slate-300">
           以下のタイトルで ToDo を作成し、すぐに作業を開始しますか？

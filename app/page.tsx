@@ -1409,8 +1409,9 @@ export default function Page() {
               </h1>
 
               <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
+                <p className="text-base text-slate-200">TODO作成</p>
                 <p className="text-xs text-slate-400">
-                  クイック開始（カテゴリとサブカテゴリを選ぶと自動で ToDo を作成して開始）
+                  カテゴリとサブカテゴリを選ぶと自動で ToDo を作成して開始
                 </p>
                 <select
                   value={quickStartCategory ?? ""}
