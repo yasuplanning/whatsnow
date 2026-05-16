@@ -1548,23 +1548,21 @@ export default function Page() {
             <h1 className="text-center text-3xl font-extrabold leading-tight sm:text-4xl">
               What I am doing is...
             </h1>
+
+            {/* TODO area */}
             {quickStartSection}
-            <div className="rounded-2xl bg-slate-800 p-5">
-              <p
-                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
-              >
-                {formatCategoryLabel(activeLog.category, activeLog.subcategory)}
-              </p>
-              {linkedTodos.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs text-sky-300">
+            {linkedTodos.length > 0 && (
+              <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
+                <p className="text-sm text-slate-300">
+                  このタスクに紐づくToDo
+                </p>
+                <ul className="space-y-1 text-xs text-sky-300">
                   {linkedTodos.map((t) => (
                     <li
                       key={t.id}
                       className="flex items-center justify-between gap-2"
                     >
-                      <span className="break-words">
-                        ToDo: {t.title}
-                      </span>
+                      <span className="break-words">{t.title}</span>
                       <button
                         type="button"
                         onClick={() => handleUnlinkTodoFromActive(t.id)}
@@ -1575,103 +1573,114 @@ export default function Page() {
                     </li>
                   ))}
                 </ul>
-              )}
-              {activeLogPhotos.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {activeLogPhotos.map((p) => (
-                    <div key={p.id} className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.dataUrl}
-                        alt="task photo"
-                        className="h-24 w-full rounded-lg object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTaskPhoto(p.id)}
-                        aria-label="写真を削除"
-                        className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-xs text-white hover:bg-black/80"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {activeLog.memo && (
-                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-200">
-                  {activeLog.memo}
-                </p>
-              )}
-            </div>
+              </div>
+            )}
 
-            <dl className="space-y-3 rounded-2xl bg-slate-800 p-5 text-base">
-              <Row label="開始時刻" value={formatClock(activeLog.startAt)} />
-              <Row
-                label="終了予定時刻"
-                value={
-                  activeLog.plannedEndAt
-                    ? formatClock(activeLog.plannedEndAt)
-                    : "未定"
-                }
-              />
-              <Row label="経過時間" value={formatDuration(elapsedMs)} mono />
-              <Row
-                label="残り時間"
-                value={
-                  remainingMs === null ? "未定" : formatDuration(remainingMs)
-                }
-                mono
-              />
-            </dl>
+            {/* TASK area */}
+            <div className="space-y-4 rounded-2xl bg-slate-800 p-5">
+              <p
+                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
+              >
+                {formatCategoryLabel(activeLog.category, activeLog.subcategory)}
+              </p>
 
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
-            >
-              編集
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase({ kind: "askEnd" })}
-              className="w-full rounded-2xl bg-emerald-500 py-5 text-xl font-bold text-white hover:bg-emerald-400"
-            >
-              終了する
-            </button>
-          </div>
-        )}
+              <div className="relative rounded-xl bg-slate-900 p-4">
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  aria-label="編集"
+                  className="absolute right-2 top-2 rounded-md p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+                <dl className="space-y-3 text-base">
+                  <Row label="開始時刻" value={formatClock(activeLog.startAt)} />
+                  <Row
+                    label="終了予定時刻"
+                    value={
+                      activeLog.plannedEndAt
+                        ? formatClock(activeLog.plannedEndAt)
+                        : "未定"
+                    }
+                  />
+                  <Row label="経過時間" value={formatDuration(elapsedMs)} mono />
+                  <Row
+                    label="残り時間"
+                    value={
+                      remainingMs === null ? "未定" : formatDuration(remainingMs)
+                    }
+                    mono
+                  />
+                </dl>
+              </div>
 
-        {mounted && activeLog && (
-          <div className="pt-6">
-            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setTaskMemoOpen(true)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
+                >
+                  メモ
+                </button>
+                {activeLog.memo && (
+                  <p className="whitespace-pre-wrap break-words rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-200">
+                    {activeLog.memo}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 text-base font-semibold text-slate-100 hover:bg-slate-800"
+                >
+                  写真
+                </button>
+                {activeLogPhotos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {activeLogPhotos.map((p) => (
+                      <div key={p.id} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.dataUrl}
+                          alt="task photo"
+                          className="h-24 w-full rounded-lg object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTaskPhoto(p.id)}
+                          aria-label="写真を削除"
+                          className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-xs text-white hover:bg-black/80"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    void handlePhotoFile(f);
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                />
+              </div>
+
               <button
                 type="button"
-                onClick={() => setTaskMemoOpen(true)}
-                className="rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
+                onClick={() => setPhase({ kind: "askEnd" })}
+                className="w-full rounded-xl bg-emerald-500 py-5 text-xl font-bold text-white hover:bg-emerald-400"
               >
-                メモ
-              </button>
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className="rounded-2xl border border-slate-700 bg-slate-900 py-4 text-base font-semibold text-slate-100 hover:bg-slate-800"
-              >
-                写真
+                終了する
               </button>
             </div>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => {
-                const f = e.target.files?.[0] ?? null;
-                void handlePhotoFile(f);
-                e.target.value = "";
-              }}
-              className="hidden"
-            />
           </div>
         )}
       </section>
@@ -1989,6 +1998,23 @@ function TodoIcon({ className }: { className?: string }) {
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="m8 11 2 2 4-4" />
       <path d="M8 17h8" />
+    </svg>
+  );
+}
+
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
     </svg>
   );
 }
