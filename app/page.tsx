@@ -306,7 +306,7 @@ export default function Page() {
       plannedEndNotifiedRef.current.add(activeLog.id);
       showNotification(
         "終了予定時刻です",
-        `「${formatCategoryLabel(activeLog.category, activeLog.subcategory)}」の予定終了時刻になりました。`,
+        `「${activeLog.category}」の予定終了時刻になりました。`,
         () => setPhase({ kind: "askEnd" })
       );
     }
@@ -539,7 +539,17 @@ export default function Page() {
       if (cat === item.category && sub === item.subcategory) return item;
       return { ...item, category: cat, subcategory: sub };
     };
-    const nextLogs = logs.map(applyCat);
+    const applyCatNoSub = <T extends { category: string }>(item: T): T => {
+      let cat = item.category;
+      if (opts.deleteName && cat === opts.deleteName) {
+        cat = "その他";
+      } else if (opts.renameFromTo && cat === opts.renameFromTo.from) {
+        cat = opts.renameFromTo.to;
+      }
+      if (cat === item.category) return item;
+      return { ...item, category: cat };
+    };
+    const nextLogs = logs.map(applyCatNoSub);
     if (nextLogs.some((l, i) => l !== logs[i])) persist(nextLogs);
     const nextCheckins = checkins.map(applyCat);
     if (nextCheckins.some((c, i) => c !== checkins[i]))
@@ -562,17 +572,13 @@ export default function Page() {
     saveLastActivityAt(iso);
   }, []);
 
-  const startTaskWith = (
-    category: Category,
-    subcategory: string | null
-  ) => {
+  const startTaskWith = (category: Category) => {
     void ensureNotificationPermission();
     const nowIso = nowJstIso();
     const entry: LogEntry = {
       id: generateId(),
-      type: "task",
+      type: "log",
       category,
-      subcategory,
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -620,9 +626,8 @@ export default function Page() {
     }
     const entry: LogEntry = {
       id: generateId(),
-      type: "task",
+      type: "log",
       category: todo.category,
-      subcategory: todo.subcategory,
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -679,7 +684,6 @@ export default function Page() {
     deductionMinutes: number;
     memo: string;
     category: Category;
-    subcategory: string | null;
     todoIds: string[];
     todoAllocations: TodoAllocation[];
   }) => {
@@ -702,7 +706,6 @@ export default function Page() {
       endAt: endAtIso,
       memo: input.memo,
       category: input.category,
-      subcategory: input.subcategory,
       deductionMinutes: input.deductionMinutes,
       todoIds: input.todoIds,
       todoId: input.todoIds[0] ?? null,
@@ -718,7 +721,6 @@ export default function Page() {
     startAt: Date;
     plannedEndAt: Date | null;
     category: Category;
-    subcategory: string | null;
   }) => {
     if (!activeLog) return;
     const nowIso = nowJstIso();
@@ -731,7 +733,6 @@ export default function Page() {
       startAt: startAtIso,
       plannedEndAt: plannedEndAtIso,
       category: input.category,
-      subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, activeLog.endAt),
       updatedAt: nowIso,
     };
@@ -804,16 +805,14 @@ export default function Page() {
     endAt: Date;
     memo: string;
     category: Category;
-    subcategory: string | null;
   }) => {
     const nowIso = nowJstIso();
     const startAtIso = toJstIso(input.startAt);
     const endAtIso = toJstIso(input.endAt);
     const entry: LogEntry = {
       id: generateId(),
-      type: "task",
+      type: "log",
       category: input.category,
-      subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, endAtIso),
       startAt: startAtIso,
       plannedEndAt: null,
@@ -1477,7 +1476,7 @@ export default function Page() {
                         type="button"
                         onClick={() => {
                           if (c.subcategories.length === 0) {
-                            startTaskWith(c.name, null);
+                            startTaskWith(c.name);
                             return;
                           }
                           setAwaitingSubFor(c.name);
@@ -1504,9 +1503,8 @@ export default function Page() {
                   return (
                     <select
                       value=""
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        startTaskWith(def.name, v === "" ? null : v);
+                      onChange={() => {
+                        startTaskWith(def.name);
                       }}
                       className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
                     >
@@ -1563,7 +1561,7 @@ export default function Page() {
               <p
                 className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
               >
-                {formatCategoryLabel(activeLog.category, activeLog.subcategory)}
+                {activeLog.category}
               </p>
 
               <div className="relative rounded-xl bg-slate-900 p-4 pt-10">
@@ -1764,7 +1762,6 @@ export default function Page() {
           categories={categories}
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
-          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {checkinOpen && (
@@ -1785,7 +1782,6 @@ export default function Page() {
           log={activeLog}
           onClose={() => setEditOpen(false)}
           onConfirm={handleEditActive}
-          onAddSubcategory={handleRequestAddSubcategory}
         />
       )}
       {todoManageOpen && !todoForm && (
@@ -1905,7 +1901,6 @@ export default function Page() {
               categories={categories}
               onClose={() => setEditPastLogId(null)}
               onConfirm={handleEditPastTaskConfirm}
-              onAddSubcategory={handleRequestAddSubcategory}
             />
           );
         })()}
@@ -1928,11 +1923,7 @@ export default function Page() {
           <QuickStartConfirmModal
             category={quickStartCategory}
             subcategory={quickStartSubcategory}
-            endingActiveTaskTitle={
-              activeLog
-                ? formatCategoryLabel(activeLog.category, activeLog.subcategory)
-                : null
-            }
+            endingActiveTaskTitle={activeLog?.category ?? null}
             onConfirm={confirmQuickStart}
             onCancel={cancelQuickStart}
           />

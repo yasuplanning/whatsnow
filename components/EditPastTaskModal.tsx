@@ -5,7 +5,6 @@ import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import CompletedTodoPickerModal from "./CompletedTodoPickerModal";
 import type { LogEntry, TodoAllocation, TodoItem } from "@/lib/types";
-import { formatCategoryLabel } from "@/lib/category";
 import type { Category, CategoryDefinition } from "@/lib/category";
 import {
   appendTimestampLine,
@@ -32,11 +31,9 @@ interface Props {
     deductionMinutes: number;
     memo: string;
     category: Category;
-    subcategory: string | null;
     todoIds: string[];
     todoAllocations: TodoAllocation[];
   }) => void;
-  onAddSubcategory?: (categoryName: string) => void;
 }
 
 interface RatioRow {
@@ -51,7 +48,6 @@ export default function EditPastTaskModal({
   categories,
   onClose,
   onConfirm,
-  onAddSubcategory,
 }: Props) {
   const initialStart = new Date(log.startAt);
   const initialEnd = log.endAt ? new Date(log.endAt) : new Date();
@@ -65,9 +61,6 @@ export default function EditPastTaskModal({
   );
   const [memo, setMemo] = useState<string>(log.memo);
   const [category, setCategory] = useState<Category>(log.category);
-  const [subcategory, setSubcategory] = useState<string | null>(
-    log.subcategory ?? null
-  );
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
 
   const linkedTodos = useMemo(() => {
@@ -215,7 +208,6 @@ export default function EditPastTaskModal({
       deductionMinutes: deductionNum,
       memo,
       category,
-      subcategory,
       todoIds: rows.map((r) => r.todoId),
       todoAllocations: allocations,
     });
@@ -224,24 +216,18 @@ export default function EditPastTaskModal({
   const deductionOverflow = preview.deduction > preview.duration;
 
   return (
-    <Modal title="過去タスクを編集" onClose={onClose}>
+    <Modal title="過去ログを編集" onClose={onClose}>
       <div className="space-y-4">
         <div className="rounded-xl bg-slate-900 p-3">
           <p className="whitespace-pre-wrap break-words text-base font-semibold">
-            {formatCategoryLabel(category, subcategory)}
+            {category}
           </p>
         </div>
 
         <CategorySelect
           categories={categories}
           value={category}
-          onChange={(c) => {
-            setCategory(c);
-            setSubcategory(null);
-          }}
-          subcategoryValue={subcategory}
-          onSubcategoryChange={setSubcategory}
-          onAddSubcategory={onAddSubcategory}
+          onChange={(c) => setCategory(c)}
         />
 
         <div className="space-y-2">

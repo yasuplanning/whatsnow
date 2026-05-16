@@ -5,10 +5,9 @@ import type {
   TodoItem,
 } from "./types";
 import type { Category } from "./category";
-import { formatCategoryLabel } from "./category";
 import { diffMinutes } from "./time";
 
-export type UnifiedKind = "task" | "checkin" | "countdown" | "todoDone";
+export type UnifiedKind = "log" | "checkin" | "countdown" | "todoDone";
 
 export interface UnifiedLog {
   id: string;
@@ -33,11 +32,11 @@ export interface UnifiedLog {
   updatedAt: string;
 }
 
-export function taskToUnified(t: LogEntry): UnifiedLog {
+export function logToUnified(t: LogEntry): UnifiedLog {
   return {
     id: t.id,
-    type: "task",
-    title: formatCategoryLabel(t.category, t.subcategory),
+    type: "log",
+    title: t.category,
     category: t.category,
     startAt: t.startAt || null,
     endAt: t.endAt,

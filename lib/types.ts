@@ -1,6 +1,6 @@
 import type { Category } from "./category";
 
-export type EntryType = "task" | "checkin";
+export type EntryType = "log" | "checkin";
 
 export type LogStatus = "active" | "completed";
 
@@ -11,9 +11,8 @@ export interface TodoAllocation {
 
 export interface LogEntry {
   id: string;
-  type: "task";
+  type: "log";
   category: Category;
-  subcategory: string | null;
   startAt: string;
   plannedEndAt: string | null;
   endAt: string | null;

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Modal from "./Modal";
 import type { LogEntry, TodoItem } from "@/lib/types";
 import type { CategoryDefinition } from "@/lib/category";
-import { getCategoryColor, formatCategoryLabel } from "@/lib/category";
+import { getCategoryColor } from "@/lib/category";
 import { getAllocationMinutes, getDurationMinutes } from "@/lib/allocation";
 import { formatLocalDateKey, formatClock } from "@/lib/time";
 
@@ -142,34 +142,11 @@ export default function AggregateModal({
     return { kind: "todo", groups };
   }, [shown, mode, categoryName, startDate, endDate, logs, todos]);
 
+  // Logs no longer have subcategories — always render flat per category.
   const subgroupTasks = (
-    cat: string,
-    items: LogEntry[]
-  ): { sub: string | null; items: LogEntry[]; total: number }[] | null => {
-    const def = categories.find((c) => c.name === cat);
-    if (!def || def.subcategories.length === 0) return null;
-    const map = new Map<string | null, LogEntry[]>();
-    for (const l of items) {
-      const key =
-        l.subcategory && def.subcategories.includes(l.subcategory)
-          ? l.subcategory
-          : null;
-      const arr = map.get(key) ?? [];
-      arr.push(l);
-      map.set(key, arr);
-    }
-    return Array.from(map.entries())
-      .map(([sub, list]) => ({
-        sub,
-        items: list,
-        total: list.reduce((s, l) => s + getDurationMinutes(l), 0),
-      }))
-      .sort((a, b) => {
-        if (a.sub === null) return 1;
-        if (b.sub === null) return -1;
-        return b.total - a.total;
-      });
-  };
+    _cat: string,
+    _items: LogEntry[]
+  ): { sub: string | null; items: LogEntry[]; total: number }[] | null => null;
 
   const subgroupTodos = (
     cat: string,
@@ -401,7 +378,7 @@ function TaskCard({ log }: { log: LogEntry }) {
     <div className="rounded-md bg-slate-800 px-2 py-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className="break-words text-sm text-slate-100">
-          {formatCategoryLabel(log.category, log.subcategory)}
+          {log.category}
         </span>
         <span className="shrink-0 text-xs tabular-nums text-slate-300">
           {formatMinutes(getDurationMinutes(log))}

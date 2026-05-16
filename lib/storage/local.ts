@@ -242,9 +242,8 @@ function migrateLogEntry(raw: any): LogEntry {
     : [];
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
-    type: "task",
+    type: "log",
     category,
-    subcategory: readSubcategory(raw),
     startAt,
     plannedEndAt,
     endAt,

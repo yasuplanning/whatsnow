@@ -119,6 +119,43 @@ export function getDefaultCategories(): CategoryDefinition[] {
   return items;
 }
 
+// Log categories never carry subcategories. Builtin defaults are a focused
+// set of common activity buckets; users edit the list independently of the
+// ToDo category set.
+const LOG_BUILTIN_SPECS: { name: string; color: string }[] = [
+  { name: "仕事", color: "bg-blue-200 text-blue-900" },
+  { name: "家事", color: "bg-emerald-200 text-emerald-900" },
+  { name: "食事", color: "bg-amber-200 text-amber-900" },
+  { name: "休憩", color: "bg-slate-300 text-slate-800" },
+  { name: "移動", color: "bg-sky-200 text-sky-900" },
+];
+
+export function getDefaultLogCategories(): CategoryDefinition[] {
+  const items: CategoryDefinition[] = LOG_BUILTIN_SPECS.map((s) => ({
+    id: `log-builtin-${s.name}`,
+    name: s.name,
+    color: s.color,
+    builtin: true,
+    subcategories: [],
+  }));
+  items.push({
+    id: "log-builtin-その他",
+    name: OTHER_CATEGORY,
+    color: OTHER_CATEGORY_COLOR,
+    builtin: true,
+    subcategories: [],
+  });
+  return items;
+}
+
+export function resolveLogCategory(
+  name: string,
+  logCategories: CategoryDefinition[]
+): string {
+  if (logCategories.some((c) => c.name === name)) return name;
+  return logCategories[0]?.name ?? OTHER_CATEGORY;
+}
+
 export function inferCategory(text: string): Category {
   if (!text) return OTHER_CATEGORY;
   for (const [cat, words] of Object.entries(BUILTIN_KEYWORDS)) {

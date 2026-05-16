@@ -15,9 +15,7 @@ interface Props {
     startAt: Date;
     plannedEndAt: Date | null;
     category: Category;
-    subcategory: string | null;
   }) => void;
-  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export default function EditActiveTaskModal({
@@ -25,7 +23,6 @@ export default function EditActiveTaskModal({
   log,
   onClose,
   onConfirm,
-  onAddSubcategory,
 }: Props) {
   const initialStartDate = new Date(log.startAt);
   const fallbackPlanned = new Date(initialStartDate.getTime() + 60 * 60 * 1000);
@@ -40,9 +37,6 @@ export default function EditActiveTaskModal({
       : toDatetimeLocal(fallbackPlanned)
   );
   const [category, setCategory] = useState<Category>(log.category);
-  const [subcategory, setSubcategory] = useState<string | null>(
-    log.subcategory ?? null
-  );
   const [error, setError] = useState<string>("");
 
   const handleSubmit = () => {
@@ -67,7 +61,6 @@ export default function EditActiveTaskModal({
       startAt: startDate,
       plannedEndAt: plannedEndDate,
       category,
-      subcategory,
     });
   };
 
@@ -77,13 +70,7 @@ export default function EditActiveTaskModal({
         <CategorySelect
           categories={categories}
           value={category}
-          onChange={(c) => {
-            setCategory(c);
-            setSubcategory(null);
-          }}
-          subcategoryValue={subcategory}
-          onSubcategoryChange={setSubcategory}
-          onAddSubcategory={onAddSubcategory}
+          onChange={(c) => setCategory(c)}
         />
 
         <div className="space-y-2">

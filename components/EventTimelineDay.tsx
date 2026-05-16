@@ -8,7 +8,7 @@ import type {
   TodoItem,
 } from "@/lib/types";
 import type { Category } from "@/lib/category";
-import { CATEGORY_COLOR, formatCategoryLabel } from "@/lib/category";
+import { CATEGORY_COLOR } from "@/lib/category";
 
 export type TimelineKind = "task" | "checkin" | "countdown" | "todoDone";
 
@@ -111,7 +111,7 @@ function buildItems(
       items.push({
         id: t.id,
         kind: "task",
-        title: formatCategoryLabel(t.category, t.subcategory),
+        title: t.category,
         category: t.category,
         startIso: t.startAt,
         endIso: t.endAt,
@@ -127,7 +127,7 @@ function buildItems(
       items.push({
         id: t.id,
         kind: "task",
-        title: formatCategoryLabel(t.category, t.subcategory),
+        title: t.category,
         category: t.category,
         startIso: t.startAt,
         endIso: null,

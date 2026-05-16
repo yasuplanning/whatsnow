@@ -14,16 +14,13 @@ interface Props {
     endAt: Date;
     memo: string;
     category: Category;
-    subcategory: string | null;
   }) => void;
-  onAddSubcategory?: (categoryName: string) => void;
 }
 
 export default function PastLogModal({
   categories,
   onClose,
   onConfirm,
-  onAddSubcategory,
 }: Props) {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -33,7 +30,6 @@ export default function PastLogModal({
   const [category, setCategory] = useState<Category>(
     categories[0]?.name ?? "その他"
   );
-  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
 
   const handleSubmit = () => {
@@ -52,23 +48,16 @@ export default function PastLogModal({
       endAt: endDate,
       memo,
       category,
-      subcategory,
     });
   };
 
   return (
-    <Modal title="過去の記録を追加" onClose={onClose}>
+    <Modal title="過去のログを追加" onClose={onClose}>
       <div className="space-y-4">
         <CategorySelect
           categories={categories}
           value={category}
-          onChange={(c) => {
-            setCategory(c);
-            setSubcategory(null);
-          }}
-          subcategoryValue={subcategory}
-          onSubcategoryChange={setSubcategory}
-          onAddSubcategory={onAddSubcategory}
+          onChange={(c) => setCategory(c)}
         />
 
         <div className="grid grid-cols-1 gap-3">

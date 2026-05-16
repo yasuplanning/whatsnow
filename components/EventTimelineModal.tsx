@@ -12,7 +12,7 @@ import EventTimelineDay, {
   formatTimeHM,
   type TimelineItem,
 } from "./EventTimelineDay";
-import { CATEGORY_COLOR, formatCategoryLabel } from "@/lib/category";
+import { CATEGORY_COLOR } from "@/lib/category";
 import { getPhotoDataUrl } from "@/lib/storage";
 import {
   countContributingTasks,
@@ -59,7 +59,7 @@ function taskLogToTimelineItem(log: LogEntry): TimelineItem {
   return {
     id: log.id,
     kind: "task",
-    title: formatCategoryLabel(log.category, log.subcategory),
+    title: log.category,
     category: log.category,
     startIso: log.startAt,
     endIso: log.endAt,
@@ -245,10 +245,7 @@ export default function EventTimelineModal({
                   })
                   .map((x) => ({
                     id: x.log.id,
-                    title: formatCategoryLabel(
-                      x.log.category,
-                      x.log.subcategory
-                    ),
+                    title: x.log.category,
                     minutes: x.minutes,
                   }))
               : undefined
