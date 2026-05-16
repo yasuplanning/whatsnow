@@ -23,12 +23,12 @@ export default function QuickStartConfirmModal({
       <div className="space-y-4">
         <p className="text-sm text-slate-300">
           {ending
-            ? "現在のタスクを終了して、以下のタイトルで ToDo を作成し、新しい作業を開始しますか？"
+            ? "現在のログを終了して、以下のタイトルで ToDo を作成し、新しい作業を開始しますか？"
             : "以下のタイトルで ToDo を作成し、すぐに作業を開始しますか？"}
         </p>
         {ending && (
           <p className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-slate-400">
-            終了するタスク：
+            終了するログ：
             <span className="text-slate-200">{endingActiveTaskTitle}</span>
           </p>
         )}

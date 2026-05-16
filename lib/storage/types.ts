@@ -18,6 +18,7 @@ export interface BackupSnapshot {
   countdowns: CountdownTimer[];
   subscriptions: Subscription[];
   categories: CategoryDefinition[];
+  logCategories: CategoryDefinition[];
   lastActivityAt: string | null;
   photos: Record<string, string>;
 }
@@ -30,6 +31,7 @@ export interface RemoteData {
   countdowns: CountdownTimer[];
   subscriptions: Subscription[];
   categories: CategoryDefinition[];
+  logCategories: CategoryDefinition[];
   lastActivityAt: string | null;
 }
 

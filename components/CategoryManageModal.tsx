@@ -5,6 +5,7 @@ import type { CategoryDefinition } from "@/lib/category";
 
 interface Props {
   categories: CategoryDefinition[];
+  kind?: "todo" | "log";
   onClose: () => void;
   onAdd: () => void;
   onEdit: (cat: CategoryDefinition) => void;
@@ -12,12 +13,14 @@ interface Props {
 
 export default function CategoryManageModal({
   categories,
+  kind = "todo",
   onClose,
   onAdd,
   onEdit,
 }: Props) {
+  const title = kind === "log" ? "ログカテゴリ管理" : "ToDoカテゴリ管理";
   return (
-    <Modal title="カテゴリ管理" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="space-y-4">
         <button
           type="button"

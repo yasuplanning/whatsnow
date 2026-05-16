@@ -377,7 +377,7 @@ function TimelineDetail({
             </button>
             {totalAllocated.taskCount > 0 && (
               <p className="text-xs text-slate-500">
-                タスク{totalAllocated.taskCount}件から集計
+                ログ{totalAllocated.taskCount}件から集計
               </p>
             )}
             {showContributors &&

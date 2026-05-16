@@ -11,6 +11,7 @@ import type {
 import {
   type CategoryDefinition,
   getDefaultCategories,
+  getDefaultLogCategories,
   inferCategoryFromTitleAndMemo,
   normalizeCategory,
 } from "../category";
@@ -25,6 +26,7 @@ const COUNTDOWN_STORAGE_KEY = "whatsnow.countdowns.v1";
 const SUBSCRIPTION_STORAGE_KEY = "whatsnow.subscriptions.v1";
 const PHOTO_STORAGE_KEY = "whatsnow.photos.v1";
 const CATEGORY_STORAGE_KEY = "whatsnow.categories.v1";
+const LOG_CATEGORY_STORAGE_KEY = "whatsnow.logCategories.v1";
 const BACKUP_KEY = "whatsnow.backup.preMigration.v1";
 
 // In S3-mode the index layer disables this so reading does not trigger a PUT
@@ -909,6 +911,67 @@ export function clearAllCategories(): void {
   }
 }
 
+export function getLogCategoriesFromStorage(): CategoryDefinition[] {
+  if (!isBrowser()) return getDefaultLogCategories();
+  let raw: unknown;
+  try {
+    const text = window.localStorage.getItem(LOG_CATEGORY_STORAGE_KEY);
+    raw = text ? JSON.parse(text) : null;
+  } catch {
+    raw = null;
+  }
+  if (!Array.isArray(raw)) {
+    const defaults = getDefaultLogCategories();
+    if (shouldWriteBackOnRead) saveLogCategories(defaults);
+    return defaults;
+  }
+  const migrated: CategoryDefinition[] = [];
+  for (const item of raw) {
+    const def = migrateCategoryDefinition(item);
+    if (def) {
+      // Log categories never carry subcategories — strip any legacy data.
+      migrated.push({ ...def, subcategories: [] });
+    }
+  }
+  if (migrated.length === 0) {
+    const defaults = getDefaultLogCategories();
+    if (shouldWriteBackOnRead) saveLogCategories(defaults);
+    return defaults;
+  }
+  if (!migrated.some((c) => c.name === "その他")) {
+    migrated.push({
+      id: "log-builtin-その他",
+      name: "その他",
+      color: "bg-slate-200 text-slate-800",
+      builtin: true,
+      subcategories: [],
+    });
+  }
+  return migrated;
+}
+
+export function saveLogCategories(items: CategoryDefinition[]): void {
+  if (!isBrowser()) return;
+  try {
+    const stripped = items.map((c) => ({ ...c, subcategories: [] }));
+    window.localStorage.setItem(
+      LOG_CATEGORY_STORAGE_KEY,
+      JSON.stringify(stripped)
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAllLogCategories(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(LOG_CATEGORY_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export type { BackupSnapshot } from "./types";
 
 export function restoreAllData(snapshot: import("./types").BackupSnapshot): void {
@@ -921,6 +984,9 @@ export function restoreAllData(snapshot: import("./types").BackupSnapshot): void
   saveSubscriptions(snapshot.subscriptions);
   if (snapshot.categories && snapshot.categories.length > 0) {
     saveCategories(snapshot.categories);
+  }
+  if (snapshot.logCategories && snapshot.logCategories.length > 0) {
+    saveLogCategories(snapshot.logCategories);
   }
   setAllPhotos(snapshot.photos);
   if (snapshot.lastActivityAt) {

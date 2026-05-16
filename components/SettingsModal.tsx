@@ -5,6 +5,7 @@ import Modal from "./Modal";
 interface Props {
   onClose: () => void;
   onManageCategories: () => void;
+  onManageLogCategories: () => void;
   onManageRecurring: () => void;
   onManageSubscriptions: () => void;
   onBackup: () => void;
@@ -13,6 +14,7 @@ interface Props {
 export default function SettingsModal({
   onClose,
   onManageCategories,
+  onManageLogCategories,
   onManageRecurring,
   onManageSubscriptions,
   onBackup,
@@ -25,7 +27,14 @@ export default function SettingsModal({
           onClick={onManageCategories}
           className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
         >
-          カテゴリ管理
+          ToDoカテゴリ管理
+        </button>
+        <button
+          type="button"
+          onClick={onManageLogCategories}
+          className="w-full rounded-xl bg-slate-700 py-4 text-lg font-semibold text-white hover:bg-slate-600"
+        >
+          ログカテゴリ管理
         </button>
         <button
           type="button"

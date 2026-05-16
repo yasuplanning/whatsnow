@@ -13,6 +13,7 @@ const ALL = "__ALL__";
 
 interface Props {
   categories: CategoryDefinition[];
+  logCategories: CategoryDefinition[];
   logs: LogEntry[];
   todos: TodoItem[];
   onClose: () => void;
@@ -63,6 +64,7 @@ function daysFromTodayKey(days: number): string {
 
 export default function AggregateModal({
   categories,
+  logCategories,
   logs,
   todos,
   onClose,
@@ -190,7 +192,7 @@ export default function AggregateModal({
             }}
             className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
           >
-            <option value="task">タスク</option>
+            <option value="task">ログ</option>
             <option value="todo">ToDo</option>
           </select>
         </div>
@@ -266,7 +268,7 @@ export default function AggregateModal({
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span
-                        className={`inline-block rounded px-2 py-0.5 text-sm font-semibold ${getCategoryColor(g.category, categories)}`}
+                        className={`inline-block rounded px-2 py-0.5 text-sm font-semibold ${getCategoryColor(g.category, logCategories)}`}
                       >
                         {g.category}
                       </span>

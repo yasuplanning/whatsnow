@@ -11,6 +11,7 @@ import type { CategoryDefinition } from "./category";
 import {
   getAllPhotos,
   getCategoriesFromStorage,
+  getLogCategoriesFromStorage,
   getCountdownTimers,
   getRecurringTodos,
   getSubscriptions,
@@ -49,6 +50,7 @@ interface DataPayload {
   countdowns: CountdownTimer[];
   subscriptions: Subscription[];
   categories: CategoryDefinition[];
+  logCategories: CategoryDefinition[];
   lastActivityAt: string | null;
 }
 
@@ -98,6 +100,7 @@ export async function exportBackup(): Promise<ExportResult> {
   const countdowns = getCountdownTimers();
   const subscriptions = getSubscriptions();
   const categories = getCategoriesFromStorage();
+  const logCategories = getLogCategoriesFromStorage();
   const lastActivityAt = loadLastActivityAt();
   const photos = getAllPhotos();
 
@@ -109,6 +112,7 @@ export async function exportBackup(): Promise<ExportResult> {
     countdowns,
     subscriptions,
     categories,
+    logCategories,
     lastActivityAt,
   };
 
@@ -179,6 +183,9 @@ function validateData(raw: unknown): DataPayload {
     subscriptions: arr("subscriptions") as Subscription[],
     categories: Array.isArray(obj.categories)
       ? (obj.categories as CategoryDefinition[])
+      : [],
+    logCategories: Array.isArray(obj.logCategories)
+      ? (obj.logCategories as CategoryDefinition[])
       : [],
     lastActivityAt:
       typeof obj.lastActivityAt === "string" ? obj.lastActivityAt : null,
@@ -272,6 +279,7 @@ export async function importBackup(file: File): Promise<ImportPreview> {
     countdowns: data.countdowns,
     subscriptions: data.subscriptions,
     categories: data.categories ?? [],
+    logCategories: data.logCategories ?? [],
     lastActivityAt: data.lastActivityAt,
     photos,
   };

@@ -8,6 +8,7 @@ import { CATEGORY_COLOR_OPTIONS } from "@/lib/category";
 interface Props {
   initial: CategoryDefinition | null;
   existingNames: string[];
+  kind?: "todo" | "log";
   onClose: () => void;
   onSubmit: (input: {
     name: string;
@@ -32,10 +33,12 @@ interface SubRow {
 export default function CategoryFormModal({
   initial,
   existingNames,
+  kind = "todo",
   onClose,
   onSubmit,
   onDelete,
 }: Props) {
+  const showSubcategories = kind === "todo";
   const isEdit = initial !== null;
   const isOther = initial?.name === "その他";
   const canEditName = !isOther;
@@ -142,37 +145,39 @@ export default function CategoryFormModal({
           </div>
         </div>
 
-        <div className="space-y-2 rounded-xl bg-slate-900/60 p-3">
-          <p className="text-sm font-semibold text-slate-200">サブカテゴリ</p>
-          <p className="text-xs text-slate-400">
-            空のサブカテゴリは保存時に自動で除外されます。
-          </p>
-          {subs.map((s) => (
-            <div key={s.key} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={s.value}
-                onChange={(e) => handleSubChange(s.key, e.target.value)}
-                placeholder="例: 会議"
-                className="flex-1 rounded-md bg-slate-900 px-2 py-2 text-base text-white"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveSub(s.key)}
-                className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-rose-600 hover:text-white"
-              >
-                削除
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={handleAddSub}
-            className="w-full rounded-md bg-slate-800 py-2 text-xs text-slate-200 hover:bg-slate-700"
-          >
-            ＋ サブカテゴリを追加
-          </button>
-        </div>
+        {showSubcategories && (
+          <div className="space-y-2 rounded-xl bg-slate-900/60 p-3">
+            <p className="text-sm font-semibold text-slate-200">サブカテゴリ</p>
+            <p className="text-xs text-slate-400">
+              空のサブカテゴリは保存時に自動で除外されます。
+            </p>
+            {subs.map((s) => (
+              <div key={s.key} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={s.value}
+                  onChange={(e) => handleSubChange(s.key, e.target.value)}
+                  placeholder="例: 会議"
+                  className="flex-1 rounded-md bg-slate-900 px-2 py-2 text-base text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveSub(s.key)}
+                  className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-rose-600 hover:text-white"
+                >
+                  削除
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={handleAddSub}
+              className="w-full rounded-md bg-slate-800 py-2 text-xs text-slate-200 hover:bg-slate-700"
+            >
+              ＋ サブカテゴリを追加
+            </button>
+          </div>
+        )}
 
         {error && <p className="text-sm text-rose-400">{error}</p>}
 

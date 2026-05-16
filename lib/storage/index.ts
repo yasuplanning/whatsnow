@@ -83,6 +83,7 @@ export {
   getCountdownTimers,
   getSubscriptions,
   getCategoriesFromStorage,
+  getLogCategoriesFromStorage,
   getAllPhotos,
 } from "./local";
 
@@ -110,6 +111,7 @@ function buildRemoteSnapshot(): RemoteData {
     countdowns: Local.getCountdownTimers(),
     subscriptions: Local.getSubscriptions(),
     categories: Local.getCategoriesFromStorage(),
+    logCategories: Local.getLogCategoriesFromStorage(),
     // Per-device idle indicator; never synchronised across devices.
     lastActivityAt: null,
   };
@@ -124,6 +126,9 @@ function applyRemoteToLocal(data: RemoteData): void {
   Local.saveSubscriptions(data.subscriptions ?? []);
   if (Array.isArray(data.categories) && data.categories.length > 0) {
     Local.saveCategories(data.categories);
+  }
+  if (Array.isArray(data.logCategories) && data.logCategories.length > 0) {
+    Local.saveLogCategories(data.logCategories);
   }
   // Intentionally skip lastActivityAt: this field is per-device.
 }
@@ -291,6 +296,10 @@ export function saveCategories(items: CategoryDefinition[]): void {
   Local.saveCategories(items);
   afterWrite();
 }
+export function saveLogCategories(items: CategoryDefinition[]): void {
+  Local.saveLogCategories(items);
+  afterWrite();
+}
 
 // lastActivityAt: per spec, kept locally and not synced to S3.
 // Still mirrored into latest.json on the next push so a fresh device sees
@@ -328,6 +337,10 @@ export function clearAllSubscriptions(): void {
 }
 export function clearAllCategories(): void {
   Local.clearAllCategories();
+  afterWrite();
+}
+export function clearAllLogCategories(): void {
+  Local.clearAllLogCategories();
   afterWrite();
 }
 export function clearAllPhotos(): void {

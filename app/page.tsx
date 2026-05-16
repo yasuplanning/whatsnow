@@ -18,6 +18,7 @@ import {
   addTodo,
   cancelCountdownTimer,
   clearAllCategories,
+  clearAllLogCategories,
   clearAllCheckins,
   clearAllCountdownTimers,
   clearAllLogs,
@@ -33,6 +34,7 @@ import {
   findActiveLog,
   generateId,
   getCategoriesFromStorage,
+  getLogCategoriesFromStorage,
   getCountdownTimers,
   getRecurringTodos,
   getSubscriptions,
@@ -47,6 +49,7 @@ import {
   getPhotoDataUrl,
   savePhoto,
   saveCategories,
+  saveLogCategories,
   saveCheckins,
   saveCountdownTimers,
   saveLastActivityAt,
@@ -80,10 +83,11 @@ import {
 import { normalizeAllocations } from "@/lib/allocation";
 import { compressImageToDataUrl } from "@/lib/image";
 import {
-  formatCategoryLabel,
   inferCategoryFromTitleAndMemo,
   getCategoryColor,
   getDefaultCategories,
+  getDefaultLogCategories,
+  resolveLogCategory,
   type Category,
   type CategoryDefinition,
 } from "@/lib/category";
@@ -146,7 +150,6 @@ export default function Page() {
   const [checkins, setCheckins] = useState<CheckinEntry[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
-  const [awaitingSubFor, setAwaitingSubFor] = useState<string | null>(null);
   const [pendingTodoIds, setPendingTodoIds] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -178,12 +181,18 @@ export default function Page() {
   const [categories, setCategories] = useState<CategoryDefinition[]>(() =>
     getDefaultCategories()
   );
+  const [logCategories, setLogCategories] = useState<CategoryDefinition[]>(
+    () => getDefaultLogCategories()
+  );
   const [aggregateOpen, setAggregateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoryManageOpen, setCategoryManageOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryFormState | null>(
     null
   );
+  const [logCategoryManageOpen, setLogCategoryManageOpen] = useState(false);
+  const [logCategoryForm, setLogCategoryForm] =
+    useState<CategoryFormState | null>(null);
   const [subcategoryAddTarget, setSubcategoryAddTarget] = useState<
     string | null
   >(null);
@@ -224,6 +233,7 @@ export default function Page() {
     setLogs(loaded);
     setCheckins(loadCheckins());
     setCategories(getCategoriesFromStorage());
+    setLogCategories(getLogCategoriesFromStorage());
     const loadedTodos = getTodos();
     const loadedRecurring = getRecurringTodos();
     const loadedSubscriptions = getSubscriptions();
@@ -429,6 +439,11 @@ export default function Page() {
     saveCategories(next);
   }, []);
 
+  const persistLogCategories = useCallback((next: CategoryDefinition[]) => {
+    setLogCategories(next);
+    saveLogCategories(next);
+  }, []);
+
   const handleRequestAddSubcategory = (categoryName: string) => {
     setSubcategoryAddTarget(categoryName);
   };
@@ -506,6 +521,73 @@ export default function Page() {
       nowIso,
     });
     setCategoryForm(null);
+  };
+
+  const rewriteLogCategoryRefs = (opts: {
+    renameFromTo: { from: string; to: string } | null;
+    deleteName: string | null;
+  }) => {
+    const apply = (item: LogEntry): LogEntry => {
+      let cat = item.category;
+      if (opts.deleteName && cat === opts.deleteName) {
+        cat = "その他";
+      } else if (opts.renameFromTo && cat === opts.renameFromTo.from) {
+        cat = opts.renameFromTo.to;
+      }
+      if (cat === item.category) return item;
+      return { ...item, category: cat };
+    };
+    const next = logs.map(apply);
+    if (next.some((l, i) => l !== logs[i])) persist(next);
+  };
+
+  const handleLogCategorySubmit = (input: {
+    name: string;
+    color: string;
+    subcategories: string[];
+  }) => {
+    if (!logCategoryForm) return;
+    if (logCategoryForm.mode === "add") {
+      const newCat: CategoryDefinition = {
+        id: `user-log-${generateId()}`,
+        name: input.name,
+        color: input.color,
+        builtin: false,
+        subcategories: [],
+      };
+      persistLogCategories([...logCategories, newCat]);
+    } else {
+      const prev = logCategoryForm.item;
+      const updated: CategoryDefinition = {
+        ...prev,
+        name: input.name,
+        color: input.color,
+        subcategories: [],
+      };
+      const renamedFrom = prev.name !== input.name ? prev.name : null;
+      persistLogCategories(
+        logCategories.map((c) => (c.id === prev.id ? updated : c))
+      );
+      if (renamedFrom) {
+        rewriteLogCategoryRefs({
+          renameFromTo: { from: renamedFrom, to: input.name },
+          deleteName: null,
+        });
+      }
+    }
+    setLogCategoryForm(null);
+  };
+
+  const handleLogCategoryDelete = () => {
+    if (!logCategoryForm || logCategoryForm.mode !== "edit") return;
+    const target = logCategoryForm.item;
+    if (target.name === "その他") return;
+    persistLogCategories(logCategories.filter((c) => c.id !== target.id));
+    rewriteLogCategoryRefs({
+      renameFromTo: null,
+      deleteName: target.name,
+    });
+    setLogCategoryForm(null);
   };
 
   const rewriteCategoryRefs = (opts: {
@@ -594,7 +676,6 @@ export default function Page() {
       photoIds: [],
     };
     persist(upsertLog(logs, entry));
-    setAwaitingSubFor(null);
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
@@ -627,7 +708,7 @@ export default function Page() {
     const entry: LogEntry = {
       id: generateId(),
       type: "log",
-      category: todo.category,
+      category: resolveLogCategory(todo.category, logCategories),
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -644,7 +725,6 @@ export default function Page() {
     };
     persist(upsertLog(baseLogs, entry));
     setPendingTodoIds([]);
-    setAwaitingSubFor(null);
     setPhase({ kind: "active" });
     markActivity();
   };
@@ -783,6 +863,7 @@ export default function Page() {
     clearAllCountdownTimers();
     clearAllSubscriptions();
     clearAllCategories();
+    clearAllLogCategories();
     clearLastActivityAt();
     setLogs([]);
     setCheckins([]);
@@ -791,6 +872,7 @@ export default function Page() {
     setSubscriptions([]);
     setTimers([]);
     setCategories(getDefaultCategories());
+    setLogCategories(getDefaultLogCategories());
     setLastActivityAt(null);
     setPendingTodoIds([]);
     plannedEndNotifiedRef.current.clear();
@@ -1463,62 +1545,25 @@ export default function Page() {
                 </div>
               )}
               <div className="space-y-3 rounded-2xl bg-slate-800 p-4">
-                <p className="text-base text-slate-200">タスク作成</p>
+                <p className="text-base text-slate-200">ログ作成</p>
                 <p className="text-xs text-slate-400">
                   カテゴリを選ぶとそのまま開始
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {categories.map((c) => {
-                    const selected = awaitingSubFor === c.name;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          if (c.subcategories.length === 0) {
-                            startTaskWith(c.name);
-                            return;
-                          }
-                          setAwaitingSubFor(c.name);
-                        }}
-                        className={`rounded-lg px-3 py-2 text-sm font-bold transition ${getCategoryColor(
-                          c.name,
-                          categories
-                        )} ${
-                          selected
-                            ? "ring-2 ring-white ring-offset-2 ring-offset-slate-800"
-                            : "opacity-80 hover:opacity-100"
-                        }`}
-                      >
-                        {c.name}
-                      </button>
-                    );
-                  })}
-                </div>
-                {(() => {
-                  if (!awaitingSubFor) return null;
-                  const def =
-                    categories.find((c) => c.name === awaitingSubFor) ?? null;
-                  if (!def || def.subcategories.length === 0) return null;
-                  return (
-                    <select
-                      value=""
-                      onChange={() => {
-                        startTaskWith(def.name);
-                      }}
-                      className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                  {logCategories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => startTaskWith(c.name)}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold transition opacity-80 hover:opacity-100 ${getCategoryColor(
+                        c.name,
+                        logCategories
+                      )}`}
                     >
-                      <option value="" disabled>
-                        サブカテゴリを選択して開始...
-                      </option>
-                      {def.subcategories.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                })()}
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -1534,7 +1579,7 @@ export default function Page() {
             {linkedTodos.length > 0 && (
               <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
                 <p className="text-sm text-slate-300">
-                  このタスクに紐づくToDo
+                  このログに紐づくToDo
                 </p>
                 <ul className="space-y-1 text-xs text-sky-300">
                   {linkedTodos.map((t) => (
@@ -1559,7 +1604,7 @@ export default function Page() {
             {/* TASK area */}
             <div className="space-y-4 rounded-2xl bg-slate-800 p-5">
               <p
-                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
+                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, logCategories)}`}
               >
                 {activeLog.category}
               </p>
@@ -1683,7 +1728,9 @@ export default function Page() {
         !aggregateOpen &&
         !settingsOpen &&
         !categoryManageOpen &&
-        !categoryForm && (
+        !categoryForm &&
+        !logCategoryManageOpen &&
+        !logCategoryForm && (
           <MenuModal
             onClose={() => setMenuOpen(false)}
             onTimeline={() => {
@@ -1700,6 +1747,7 @@ export default function Page() {
       {aggregateOpen && (
         <AggregateModal
           categories={categories}
+          logCategories={logCategories}
           logs={logs}
           todos={todos}
           onClose={() => setAggregateOpen(false)}
@@ -1708,12 +1756,15 @@ export default function Page() {
       {settingsOpen &&
         !categoryManageOpen &&
         !categoryForm &&
+        !logCategoryManageOpen &&
+        !logCategoryForm &&
         !recurringManageOpen &&
         !subscriptionManageOpen &&
         !backupOpen && (
           <SettingsModal
             onClose={() => setSettingsOpen(false)}
             onManageCategories={() => setCategoryManageOpen(true)}
+            onManageLogCategories={() => setLogCategoryManageOpen(true)}
             onManageRecurring={() => setRecurringManageOpen(true)}
             onManageSubscriptions={() => setSubscriptionManageOpen(true)}
             onBackup={() => setBackupOpen(true)}
@@ -1722,6 +1773,7 @@ export default function Page() {
       {categoryManageOpen && !categoryForm && (
         <CategoryManageModal
           categories={categories}
+          kind="todo"
           onClose={() => setCategoryManageOpen(false)}
           onAdd={() => setCategoryForm({ mode: "add" })}
           onEdit={(c) => setCategoryForm({ mode: "edit", item: c })}
@@ -1731,10 +1783,36 @@ export default function Page() {
         <CategoryFormModal
           initial={categoryForm.mode === "edit" ? categoryForm.item : null}
           existingNames={categories.map((c) => c.name)}
+          kind="todo"
           onClose={() => setCategoryForm(null)}
           onSubmit={handleCategorySubmit}
           onDelete={
             categoryForm.mode === "edit" ? handleCategoryDelete : undefined
+          }
+        />
+      )}
+      {logCategoryManageOpen && !logCategoryForm && (
+        <CategoryManageModal
+          categories={logCategories}
+          kind="log"
+          onClose={() => setLogCategoryManageOpen(false)}
+          onAdd={() => setLogCategoryForm({ mode: "add" })}
+          onEdit={(c) => setLogCategoryForm({ mode: "edit", item: c })}
+        />
+      )}
+      {logCategoryForm && (
+        <CategoryFormModal
+          initial={
+            logCategoryForm.mode === "edit" ? logCategoryForm.item : null
+          }
+          existingNames={logCategories.map((c) => c.name)}
+          kind="log"
+          onClose={() => setLogCategoryForm(null)}
+          onSubmit={handleLogCategorySubmit}
+          onDelete={
+            logCategoryForm.mode === "edit"
+              ? handleLogCategoryDelete
+              : undefined
           }
         />
       )}
@@ -1759,7 +1837,7 @@ export default function Page() {
       )}
       {pastOpen && (
         <PastLogModal
-          categories={categories}
+          categories={logCategories}
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
         />
@@ -1778,7 +1856,7 @@ export default function Page() {
       )}
       {editOpen && activeLog && (
         <EditActiveTaskModal
-          categories={categories}
+          categories={logCategories}
           log={activeLog}
           onClose={() => setEditOpen(false)}
           onConfirm={handleEditActive}
@@ -1898,7 +1976,7 @@ export default function Page() {
             <EditPastTaskModal
               log={target}
               todos={todos}
-              categories={categories}
+              categories={logCategories}
               onClose={() => setEditPastLogId(null)}
               onConfirm={handleEditPastTaskConfirm}
             />
