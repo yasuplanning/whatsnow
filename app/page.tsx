@@ -121,6 +121,17 @@ import SubscriptionFormModal, {
 import SyncStatusBanner from "@/components/SyncStatusBanner";
 import QuickStartConfirmModal from "@/components/QuickStartConfirmModal";
 import QuickTodoEditModal from "@/components/QuickTodoEditModal";
+import {
+  buildPointerForRenew,
+  buildPointerForStart,
+  clearActivePointer,
+  fetchActivePointer,
+  getLastEtag as getActiveLastEtag,
+  isOwnedByThisDevice,
+  LEASE_RENEW_INTERVAL_MS,
+  putActivePointer,
+} from "@/lib/storage/active";
+import type { ActiveLogPointer } from "@/lib/storage/types";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -239,7 +250,23 @@ export default function Page() {
     [categories]
   );
 
-  const activeLog = useMemo(() => findActiveLog(logs), [logs]);
+  // Phase 1: the S3 singleton active.json. Decouples "which log is running"
+  // from the latest.json snapshot so start/end/lease-renew do not contend
+  // with unrelated edits. Local-only mode keeps `activePointer` null and
+  // falls back to the legacy `logs[].status === "active"` lookup.
+  const [activePointer, setActivePointer] = useState<ActiveLogPointer | null>(
+    null
+  );
+  const [activePointerEtag, setActivePointerEtag] = useState<string | null>(
+    null
+  );
+  const activeLog = useMemo(() => {
+    if (activePointer) {
+      const byId = logs.find((l) => l.id === activePointer.logId);
+      if (byId) return byId;
+    }
+    return findActiveLog(logs);
+  }, [logs, activePointer]);
   const pendingTodos = useMemo(
     () =>
       pendingTodoIds
@@ -302,8 +329,71 @@ export default function Page() {
       if (result.usedRemote) {
         reloadAllFromStorage();
       }
+      // 3) Fetch the active-log pointer from S3. This is independent of the
+      //    main snapshot path so a stuck save never blocks "what's running".
+      const a = await fetchActivePointer();
+      if (a.status === "ok" && a.pointer) {
+        setActivePointer(a.pointer);
+        setActivePointerEtag(a.etag);
+      } else if (a.status === "absent") {
+        setActivePointer(null);
+        setActivePointerEtag(null);
+        // One-shot migration: if S3 reports no active pointer but the legacy
+        // logs[] still carries an active entry, mint a pointer for it so
+        // multi-device behaviour starts working immediately. Read from the
+        // sync localStorage cache because React state may not be flushed yet.
+        const localLogs = loadLogs();
+        const legacyActive = findActiveLog(localLogs);
+        if (legacyActive) {
+          const pointer = buildPointerForStart(legacyActive.id);
+          const result = await putActivePointer(pointer, null);
+          if (result.ok) {
+            setActivePointer(pointer);
+            setActivePointerEtag(result.etag ?? null);
+          }
+          // Conflict here means another device wrote between our GET and PUT;
+          // we just leave it and the next refresh will pick up the truth.
+        }
+      }
     })();
   }, [reloadAllFromStorage]);
+
+  // Refresh the active pointer when the user manually reloads from S3.
+  const refreshActivePointer = useCallback(async () => {
+    const a = await fetchActivePointer();
+    if (a.status === "ok" && a.pointer) {
+      setActivePointer(a.pointer);
+      setActivePointerEtag(a.etag);
+    } else if (a.status === "absent") {
+      setActivePointer(null);
+      setActivePointerEtag(null);
+    }
+  }, []);
+
+  // Lease renewal: while this device owns an unexpired pointer, refresh
+  // leaseRenewedAt / leaseExpiresAt periodically so other devices know we are
+  // still here. Runs only in S3-configured contexts; in local-only mode the
+  // pointer stays null so this is a no-op.
+  useEffect(() => {
+    if (!activePointer) return;
+    if (!isOwnedByThisDevice(activePointer)) return;
+    const tick = async () => {
+      const next = buildPointerForRenew(activePointer);
+      const result = await putActivePointer(next, activePointerEtag);
+      if (result.ok) {
+        setActivePointer(next);
+        setActivePointerEtag(result.etag ?? null);
+      } else if (result.reason === "conflict") {
+        // Someone else updated active.json under us — refresh.
+        void refreshActivePointer();
+      }
+      // unconfigured/error: skip silently; next tick or manual reload retries.
+    };
+    const id = setInterval(() => {
+      void tick();
+    }, LEASE_RENEW_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [activePointer, activePointerEtag, refreshActivePointer]);
 
   useEffect(() => {
     return subscribePhotoUpdate(() => {
@@ -687,6 +777,45 @@ export default function Page() {
     saveLastActivityAt(iso);
   }, []);
 
+  const publishActivePointer = useCallback(
+    async (logId: string) => {
+      // Best-effort: assert absence first (etag=null). If something is
+      // already there from another device we surface a conflict so the UI
+      // can prompt; for now we just refresh the pointer.
+      const pointer = buildPointerForStart(logId);
+      const result = await putActivePointer(pointer, null);
+      if (result.ok) {
+        setActivePointer(pointer);
+        setActivePointerEtag(result.etag ?? null);
+        return;
+      }
+      if (result.reason === "conflict") {
+        // Re-fetch so the user sees the foreign pointer.
+        await refreshActivePointer();
+        return;
+      }
+      // unconfigured / error: stay with legacy logs[] only.
+    },
+    [refreshActivePointer]
+  );
+
+  const retireActivePointer = useCallback(async () => {
+    // DELETE active.json, then drop local state. Use the last known etag so
+    // we don't accidentally clobber a foreign device that took over.
+    const etag = activePointerEtag ?? getActiveLastEtag();
+    const result = await clearActivePointer(etag);
+    if (result.ok) {
+      setActivePointer(null);
+      setActivePointerEtag(null);
+      return;
+    }
+    if (result.reason === "conflict") {
+      // Someone else changed it — refresh so UI shows truth.
+      await refreshActivePointer();
+    }
+    // unconfigured / error: leave it; the next end / refresh will retry.
+  }, [activePointerEtag, refreshActivePointer]);
+
   const startTaskWith = (category: Category) => {
     void ensureNotificationPermission();
     const nowIso = nowJstIso();
@@ -712,6 +841,7 @@ export default function Page() {
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
+    void publishActivePointer(entry.id);
   };
 
   const cancelQuickStart = () => {
@@ -760,6 +890,7 @@ export default function Page() {
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
+    void publishActivePointer(entry.id);
   };
 
   const buildQuickStartTodo = (): TodoItem | null => {
@@ -935,6 +1066,7 @@ export default function Page() {
     plannedEndNotifiedRef.current.delete(activeLog.id);
     setPhase({ kind: "initial" });
     markActivity();
+    void retireActivePointer();
 
     const openTodoIds = updated.todoIds.filter((id) => {
       const t = getTodoById(todos, id);
@@ -1574,7 +1706,12 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       {mounted && (
-        <SyncStatusBanner onReloaded={() => reloadAllFromStorage()} />
+        <SyncStatusBanner
+          onReloaded={() => {
+            reloadAllFromStorage();
+            void refreshActivePointer();
+          }}
+        />
       )}
       <header className="flex items-center justify-end gap-2 px-4 py-3">
         {mounted && (

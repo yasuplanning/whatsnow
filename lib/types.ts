@@ -26,6 +26,11 @@ export interface LogEntry {
   deductionMinutes: number;
   todoAllocations: TodoAllocation[];
   photoIds: string[];
+  // Entity-level optimistic locking metadata. Existing records lack these
+  // fields; readers must treat missing values as version=1 and not-deleted.
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }
 
 export interface CheckinEntry {
@@ -37,6 +42,9 @@ export interface CheckinEntry {
   checkedAt: string;
   createdAt: string;
   updatedAt: string;
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }
 
 export type CountdownTimerStatus = "active" | "done" | "cancelled";
@@ -56,6 +64,9 @@ export interface CountdownTimer {
   notified: boolean;
   createdAt: string;
   updatedAt: string;
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }
 
 export type RecurringFrequency = "monthly" | "yearly";
@@ -73,6 +84,9 @@ export interface RecurringTodo {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }
 
 export type TodoStatus = "open" | "done";
@@ -101,6 +115,9 @@ export interface TodoItem {
   subscriptionPeriodKey?: string | null;
   important: boolean;
   alerts: TodoAlert[];
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }
 
 export type PaymentCycle = "monthly" | "yearly" | "other";
@@ -129,4 +146,7 @@ export interface Subscription {
   reviewDaysBefore: number;
   createdAt: string;
   updatedAt: string;
+  version?: number;
+  deletedAt?: string | null;
+  deletedByDevice?: string | null;
 }

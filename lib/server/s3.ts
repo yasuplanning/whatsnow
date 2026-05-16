@@ -42,6 +42,10 @@ export function latestKey(): string {
   return `${getUserPrefix()}/latest.json`;
 }
 
+export function activeKey(): string {
+  return `${getUserPrefix()}/active.json`;
+}
+
 export function photoKey(id: string): string {
   return `${getUserPrefix()}/photos/${id}.json`;
 }

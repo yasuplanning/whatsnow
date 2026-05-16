@@ -10,6 +10,25 @@ import type {
 
 export const SCHEMA_VERSION = 1;
 
+/**
+ * Lightweight singleton pointer at `users/{u}/whatsnow/active.json`.
+ *
+ * The full LogEntry still lives elsewhere (currently inside latest.json; later
+ * phases will move it to logs/{id}.json). This pointer says "which log is
+ * currently running, and which device is holding the lease". A missing
+ * active.json means "no active log".
+ */
+export interface ActiveLogPointer {
+  logId: string;
+  leasedByDevice: string;
+  leaseStartedAt: string;
+  leaseRenewedAt: string;
+  leaseExpiresAt: string;
+  /** Monotonic counter incremented on each PUT for client-side reasoning. */
+  version: number;
+  schemaVersion: number;
+}
+
 export interface BackupSnapshot {
   logs: LogEntry[];
   checkins: CheckinEntry[];
