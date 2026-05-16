@@ -38,6 +38,7 @@ import {
   getSubscriptions,
   getTodoById,
   getTodos,
+  initStorageSync,
   loadCheckins,
   loadLastActivityAt,
   loadLogs,
@@ -53,6 +54,7 @@ import {
   saveRecurringTodos,
   saveSubscriptions,
   saveTodos,
+  subscribePhotoUpdate,
   updateRecurringTodo,
   updateSubscription,
   updateTodo,
@@ -112,6 +114,7 @@ import SubscriptionManageModal from "@/components/SubscriptionManageModal";
 import SubscriptionFormModal, {
   type SubmitInput as SubscriptionSubmitInput,
 } from "@/components/SubscriptionFormModal";
+import SyncStatusBanner from "@/components/SyncStatusBanner";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -193,6 +196,7 @@ export default function Page() {
   const [subscriptionForm, setSubscriptionForm] =
     useState<SubscriptionFormState | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
+  const [photoBust, setPhotoBust] = useState<number>(0);
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
 
@@ -248,8 +252,24 @@ export default function Page() {
 
   useEffect(() => {
     setMounted(true);
+    // 1) Render immediately from the localStorage cache.
     reloadAllFromStorage();
+    // 2) In the background: pull latest from S3, overwrite local cache,
+    //    then re-render. On failure the cache stays as-is and the banner
+    //    surfaces a warning to the user.
+    void (async () => {
+      const result = await initStorageSync();
+      if (result.usedRemote) {
+        reloadAllFromStorage();
+      }
+    })();
   }, [reloadAllFromStorage]);
+
+  useEffect(() => {
+    return subscribePhotoUpdate(() => {
+      setPhotoBust((b) => b + 1);
+    });
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1257,10 +1277,15 @@ export default function Page() {
         return dataUrl ? { id, dataUrl } : null;
       })
       .filter((p): p is { id: string; dataUrl: string } => p !== null);
-  }, [activeLog]);
+    // photoBust forces recomputation when a missing photo arrives from S3.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLog, photoBust]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
+      {mounted && (
+        <SyncStatusBanner onReloaded={() => reloadAllFromStorage()} />
+      )}
       <header className="flex items-center justify-end gap-2 px-4 py-3">
         {mounted && (
           <button

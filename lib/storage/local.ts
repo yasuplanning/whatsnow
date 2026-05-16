@@ -7,14 +7,14 @@ import type {
   Subscription,
   SubscriptionStatus,
   TodoItem,
-} from "./types";
+} from "../types";
 import {
   type CategoryDefinition,
   getDefaultCategories,
   inferCategoryFromTitleAndMemo,
   normalizeCategory,
-} from "./category";
-import { diffMinutes, migrateIsoToJst } from "./time";
+} from "../category";
+import { diffMinutes, migrateIsoToJst } from "../time";
 
 const STORAGE_KEY = "whatsnow.logs.v1";
 const CHECKIN_STORAGE_KEY = "whatsnow.checkins.v1";
@@ -26,6 +26,13 @@ const SUBSCRIPTION_STORAGE_KEY = "whatsnow.subscriptions.v1";
 const PHOTO_STORAGE_KEY = "whatsnow.photos.v1";
 const CATEGORY_STORAGE_KEY = "whatsnow.categories.v1";
 const BACKUP_KEY = "whatsnow.backup.preMigration.v1";
+
+// In S3-mode the index layer disables this so reading does not trigger a PUT
+// that would race other devices and burn version numbers.
+let shouldWriteBackOnRead = true;
+export function setShouldWriteBackOnRead(value: boolean): void {
+  shouldWriteBackOnRead = value;
+}
 
 function readSubcategory(raw: any): string | null {
   return typeof raw?.subcategory === "string" && raw.subcategory !== ""
@@ -103,10 +110,12 @@ function loadAndMigrate<T>(
   const raw = readArray<any>(key);
   if (raw.length === 0) return [];
   const migrated = raw.map(migrate);
-  const before = JSON.stringify(raw);
-  const after = JSON.stringify(migrated);
-  if (before !== after) {
-    writeArray(key, migrated);
+  if (shouldWriteBackOnRead) {
+    const before = JSON.stringify(raw);
+    const after = JSON.stringify(migrated);
+    if (before !== after) {
+      writeArray(key, migrated);
+    }
   }
   return migrated;
 }
@@ -159,6 +168,12 @@ export function getAllPhotos(): Record<string, string> {
 }
 
 export function setAllPhotos(map: Record<string, string>): void {
+  writePhotoMap(map);
+}
+
+export function setPhotoCache(photoId: string, dataUrl: string): void {
+  const map = readPhotoMap();
+  map[photoId] = dataUrl;
   writePhotoMap(map);
 }
 
@@ -854,7 +869,7 @@ export function getCategoriesFromStorage(): CategoryDefinition[] {
   }
   if (!Array.isArray(raw)) {
     const defaults = getDefaultCategories();
-    saveCategories(defaults);
+    if (shouldWriteBackOnRead) saveCategories(defaults);
     return defaults;
   }
   const migrated: CategoryDefinition[] = [];
@@ -864,7 +879,7 @@ export function getCategoriesFromStorage(): CategoryDefinition[] {
   }
   if (migrated.length === 0) {
     const defaults = getDefaultCategories();
-    saveCategories(defaults);
+    if (shouldWriteBackOnRead) saveCategories(defaults);
     return defaults;
   }
   if (!migrated.some((c) => c.name === "その他")) {
@@ -897,19 +912,9 @@ export function clearAllCategories(): void {
   }
 }
 
-export interface BackupSnapshot {
-  logs: LogEntry[];
-  checkins: CheckinEntry[];
-  todos: TodoItem[];
-  recurringTodos: RecurringTodo[];
-  countdowns: CountdownTimer[];
-  subscriptions: Subscription[];
-  categories: CategoryDefinition[];
-  lastActivityAt: string | null;
-  photos: Record<string, string>;
-}
+export type { BackupSnapshot } from "./types";
 
-export function restoreAllData(snapshot: BackupSnapshot): void {
+export function restoreAllData(snapshot: import("./types").BackupSnapshot): void {
   if (!isBrowser()) return;
   saveLogs(snapshot.logs);
   saveCheckins(snapshot.checkins);

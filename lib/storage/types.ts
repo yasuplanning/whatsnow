@@ -1,0 +1,67 @@
+import type { CategoryDefinition } from "../category";
+import type {
+  CheckinEntry,
+  CountdownTimer,
+  LogEntry,
+  RecurringTodo,
+  Subscription,
+  TodoItem,
+} from "../types";
+
+export const SCHEMA_VERSION = 1;
+
+export interface BackupSnapshot {
+  logs: LogEntry[];
+  checkins: CheckinEntry[];
+  todos: TodoItem[];
+  recurringTodos: RecurringTodo[];
+  countdowns: CountdownTimer[];
+  subscriptions: Subscription[];
+  categories: CategoryDefinition[];
+  lastActivityAt: string | null;
+  photos: Record<string, string>;
+}
+
+export interface RemoteData {
+  logs: LogEntry[];
+  checkins: CheckinEntry[];
+  todos: TodoItem[];
+  recurringTodos: RecurringTodo[];
+  countdowns: CountdownTimer[];
+  subscriptions: Subscription[];
+  categories: CategoryDefinition[];
+  lastActivityAt: string | null;
+}
+
+export interface RemoteSnapshot {
+  schemaVersion: number;
+  version: number;
+  updatedAt: string;
+  updatedBy: string;
+  data: RemoteData;
+}
+
+export interface SnapshotMeta {
+  version: number;
+  etag: string | null;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export type SyncMode = "unknown" | "s3" | "local";
+
+export type SyncStatus =
+  | { kind: "idle" }
+  | { kind: "syncing" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: string }
+  | { kind: "loadFailed"; message: string }
+  | { kind: "saveFailed"; message: string }
+  | { kind: "conflict" }
+  | { kind: "offline" }
+  | { kind: "localOnly" };
+
+export const CONFLICT_MESSAGE =
+  "他の端末でデータが更新されています。最新データを再読み込みしてから保存してください。";
+export const LOAD_FAILED_MESSAGE =
+  "S3から最新データを取得できなかったため、この端末の保存データを表示しています。";
