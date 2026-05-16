@@ -120,6 +120,7 @@ import SubscriptionFormModal, {
 } from "@/components/SubscriptionFormModal";
 import SyncStatusBanner from "@/components/SyncStatusBanner";
 import QuickStartConfirmModal from "@/components/QuickStartConfirmModal";
+import QuickTodoEditModal from "@/components/QuickTodoEditModal";
 
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -208,6 +209,11 @@ export default function Page() {
     string | null
   >(null);
   const [quickStartConfirmOpen, setQuickStartConfirmOpen] = useState(false);
+  const [quickTodoEdit, setQuickTodoEdit] = useState<{
+    defaultTitle: string;
+    category: Category;
+    subcategory: string | null;
+  } | null>(null);
   const plannedEndNotifiedRef = useRef<Set<string>>(new Set());
   const inactivityNotifiedRef = useRef<string | null>(null);
 
@@ -795,17 +801,51 @@ export default function Page() {
     setQuickStartSubcategory(null);
   };
 
-  // "No, just save the ToDo" path: persist the ToDo but do not start a log.
+  // "No, just save the ToDo" path: open the title/memo edit modal pre-filled
+  // from the chosen category. The ToDo is created only after the user confirms
+  // in that modal.
   const saveQuickStartTodoOnly = () => {
-    const newTodo = buildQuickStartTodo();
-    if (!newTodo) {
+    if (!quickStartCategory) {
       cancelQuickStart();
       return;
     }
-    persistTodos(addTodo(todos, newTodo));
+    const hasSub = (quickStartCategoryDef?.subcategories.length ?? 0) > 0;
+    const sub = hasSub ? quickStartSubcategory : null;
+    const defaultTitle =
+      hasSub && sub ? `${quickStartCategory} / ${sub}` : quickStartCategory;
+    setQuickTodoEdit({
+      defaultTitle,
+      category: quickStartCategory,
+      subcategory: sub,
+    });
     setQuickStartConfirmOpen(false);
     setQuickStartCategory(null);
     setQuickStartSubcategory(null);
+  };
+
+  const handleQuickTodoEditSubmit = (input: {
+    title: string;
+    memo: string;
+  }) => {
+    if (!quickTodoEdit) return;
+    const nowIso = nowJstIso();
+    const newTodo: TodoItem = {
+      id: generateId(),
+      title: input.title,
+      memo: input.memo,
+      category: quickTodoEdit.category,
+      subcategory: quickTodoEdit.subcategory,
+      progress: 0,
+      status: "open",
+      deadline: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      doneAt: null,
+      important: false,
+      alerts: [],
+    };
+    persistTodos(addTodo(todos, newTodo));
+    setQuickTodoEdit(null);
   };
 
   const handleEditPastTaskConfirm = (input: {
@@ -2056,6 +2096,13 @@ export default function Page() {
           onConfirm={confirmQuickStart}
           onSaveOnly={saveQuickStartTodoOnly}
           onCancel={cancelQuickStart}
+        />
+      )}
+      {quickTodoEdit && (
+        <QuickTodoEditModal
+          defaultTitle={quickTodoEdit.defaultTitle}
+          onSubmit={handleQuickTodoEditSubmit}
+          onCancel={() => setQuickTodoEdit(null)}
         />
       )}
     </main>
