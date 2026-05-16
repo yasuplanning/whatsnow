@@ -12,7 +12,6 @@ interface Props {
   log: LogEntry;
   onClose: () => void;
   onConfirm: (input: {
-    task: string;
     startAt: Date;
     plannedEndAt: Date | null;
     category: Category;
@@ -31,7 +30,6 @@ export default function EditActiveTaskModal({
   const initialStartDate = new Date(log.startAt);
   const fallbackPlanned = new Date(initialStartDate.getTime() + 60 * 60 * 1000);
 
-  const [task, setTask] = useState<string>(log.task);
   const [start, setStart] = useState<string>(toDatetimeLocal(initialStartDate));
   const [plannedMode, setPlannedMode] = useState<"unknown" | "pick">(
     log.plannedEndAt ? "pick" : "unknown"
@@ -48,11 +46,6 @@ export default function EditActiveTaskModal({
   const [error, setError] = useState<string>("");
 
   const handleSubmit = () => {
-    const trimmedTask = task.trim();
-    if (!trimmedTask) {
-      setError("内容を入力してください。");
-      return;
-    }
     const startDate = fromDatetimeLocal(start);
     if (!startDate) {
       setError("開始時刻を入力してください。");
@@ -71,7 +64,6 @@ export default function EditActiveTaskModal({
       }
     }
     onConfirm({
-      task: trimmedTask,
       startAt: startDate,
       plannedEndAt: plannedEndDate,
       category,
@@ -82,16 +74,6 @@ export default function EditActiveTaskModal({
   return (
     <Modal title="編集" onClose={onClose}>
       <div className="space-y-4">
-        <div className="space-y-2">
-          <label className="block text-sm text-slate-300">やった内容</label>
-          <textarea
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
-          />
-        </div>
-
         <CategorySelect
           categories={categories}
           value={category}

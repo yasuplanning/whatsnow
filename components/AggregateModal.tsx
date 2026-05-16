@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Modal from "./Modal";
 import type { LogEntry, TodoItem } from "@/lib/types";
 import type { CategoryDefinition } from "@/lib/category";
-import { getCategoryColor } from "@/lib/category";
+import { getCategoryColor, formatCategoryLabel } from "@/lib/category";
 import { getAllocationMinutes, getDurationMinutes } from "@/lib/allocation";
 import { formatLocalDateKey, formatClock } from "@/lib/time";
 
@@ -400,7 +400,9 @@ function TaskCard({ log }: { log: LogEntry }) {
   return (
     <div className="rounded-md bg-slate-800 px-2 py-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="break-words text-sm text-slate-100">{log.task}</span>
+        <span className="break-words text-sm text-slate-100">
+          {formatCategoryLabel(log.category, log.subcategory)}
+        </span>
         <span className="shrink-0 text-xs tabular-nums text-slate-300">
           {formatMinutes(getDurationMinutes(log))}
         </span>

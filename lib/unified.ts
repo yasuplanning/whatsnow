@@ -5,6 +5,7 @@ import type {
   TodoItem,
 } from "./types";
 import type { Category } from "./category";
+import { formatCategoryLabel } from "./category";
 import { diffMinutes } from "./time";
 
 export type UnifiedKind = "task" | "checkin" | "countdown" | "todoDone";
@@ -36,7 +37,7 @@ export function taskToUnified(t: LogEntry): UnifiedLog {
   return {
     id: t.id,
     type: "task",
-    title: t.task,
+    title: formatCategoryLabel(t.category, t.subcategory),
     category: t.category,
     startAt: t.startAt || null,
     endAt: t.endAt,

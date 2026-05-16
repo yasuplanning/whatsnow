@@ -80,6 +80,7 @@ import {
 import { normalizeAllocations } from "@/lib/allocation";
 import { compressImageToDataUrl } from "@/lib/image";
 import {
+  formatCategoryLabel,
   inferCategoryFromTitleAndMemo,
   getCategoryColor,
   getDefaultCategories,
@@ -145,13 +146,7 @@ export default function Page() {
   const [checkins, setCheckins] = useState<CheckinEntry[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
-  const [task, setTask] = useState<string>("");
-  const [taskCategory, setTaskCategory] = useState<Category>(() => {
-    const defaults = getDefaultCategories();
-    return defaults[0]?.name ?? "その他";
-  });
-  const [taskSubcategory, setTaskSubcategory] = useState<string | null>(null);
-  const [taskCategoryDirty, setTaskCategoryDirty] = useState(false);
+  const [awaitingSubFor, setAwaitingSubFor] = useState<string | null>(null);
   const [pendingTodoIds, setPendingTodoIds] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: "initial" });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -311,7 +306,7 @@ export default function Page() {
       plannedEndNotifiedRef.current.add(activeLog.id);
       showNotification(
         "終了予定時刻です",
-        `「${activeLog.task}」の予定終了時刻になりました。`,
+        `「${formatCategoryLabel(activeLog.category, activeLog.subcategory)}」の予定終了時刻になりました。`,
         () => setPhase({ kind: "askEnd" })
       );
     }
@@ -567,30 +562,15 @@ export default function Page() {
     saveLastActivityAt(iso);
   }, []);
 
-  const handleTaskChange = (next: string) => {
-    setTask(next);
-    if (!taskCategoryDirty) {
-      setTaskCategory(inferCategoryFromTitleAndMemo(next, ""));
-    }
-  };
-
-  const handleRegisterClick = (override?: {
-    category?: Category;
-    subcategory?: string | null;
-  }) => {
-    const trimmed = task.trim();
+  const startTaskWith = (
+    category: Category,
+    subcategory: string | null
+  ) => {
     void ensureNotificationPermission();
-    const startAt = new Date();
     const nowIso = nowJstIso();
-    const category = override?.category ?? taskCategory;
-    const subcategory =
-      override?.subcategory !== undefined
-        ? override.subcategory
-        : taskSubcategory;
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
-      task: trimmed || "（未入力）",
       category,
       subcategory,
       durationMinutes: null,
@@ -608,10 +588,7 @@ export default function Page() {
       photoIds: [],
     };
     persist(upsertLog(logs, entry));
-    setTask("");
-    setTaskCategory(categories[0]?.name ?? "その他");
-    setTaskSubcategory(null);
-    setTaskCategoryDirty(false);
+    setAwaitingSubFor(null);
     setPendingTodoIds([]);
     setPhase({ kind: "active" });
     markActivity();
@@ -668,7 +645,6 @@ export default function Page() {
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
-      task: title,
       category: quickStartCategory,
       subcategory: quickStartSubcategory,
       durationMinutes: null,
@@ -735,7 +711,6 @@ export default function Page() {
   };
 
   const handleEditActive = (input: {
-    task: string;
     startAt: Date;
     plannedEndAt: Date | null;
     category: Category;
@@ -749,7 +724,6 @@ export default function Page() {
       : null;
     const updated: LogEntry = {
       ...activeLog,
-      task: input.task,
       startAt: startAtIso,
       plannedEndAt: plannedEndAtIso,
       category: input.category,
@@ -822,7 +796,6 @@ export default function Page() {
   };
 
   const handleAddPast = (input: {
-    task: string;
     startAt: Date;
     endAt: Date;
     memo: string;
@@ -835,7 +808,6 @@ export default function Page() {
     const entry: LogEntry = {
       id: generateId(),
       type: "task",
-      task: input.task,
       category: input.category,
       subcategory: input.subcategory,
       durationMinutes: diffMinutes(startAtIso, endAtIso),
@@ -934,11 +906,6 @@ export default function Page() {
       handleLinkTodoToActive(todo.id);
       setTodoManageOpen(false);
       return;
-    }
-    if (pendingTodoIds.length === 0) {
-      setTask(todo.title);
-      setTaskCategory(todo.category);
-      setTaskCategoryDirty(true);
     }
     setPendingTodoIds((prev) =>
       prev.includes(todo.id) ? prev : [...prev, todo.id]
@@ -1517,37 +1484,21 @@ export default function Page() {
               <div className="space-y-3 rounded-2xl bg-slate-800 p-4">
                 <p className="text-base text-slate-200">タスク作成</p>
                 <p className="text-xs text-slate-400">
-                  内容を入力し、カテゴリを選ぶと開始
+                  カテゴリを選ぶとそのまま開始
                 </p>
-                <textarea
-                  value={task}
-                  onChange={(e) => handleTaskChange(e.target.value)}
-                  placeholder="例: 資料作成、皿洗い、移動など"
-                  rows={6}
-                  className="w-full resize-none rounded-xl bg-slate-900 px-4 py-4 text-lg text-white placeholder:text-slate-500"
-                />
                 <div className="flex flex-wrap gap-2">
                   {categories.map((c) => {
-                    const selected =
-                      taskCategoryDirty && taskCategory === c.name;
+                    const selected = awaitingSubFor === c.name;
                     return (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => {
                           if (c.subcategories.length === 0) {
-                            setTaskCategoryDirty(true);
-                            setTaskCategory(c.name);
-                            setTaskSubcategory(null);
-                            handleRegisterClick({
-                              category: c.name,
-                              subcategory: null,
-                            });
+                            startTaskWith(c.name, null);
                             return;
                           }
-                          setTaskCategoryDirty(true);
-                          setTaskCategory(c.name);
-                          setTaskSubcategory(null);
+                          setAwaitingSubFor(c.name);
                         }}
                         className={`rounded-lg px-3 py-2 text-sm font-bold transition ${getCategoryColor(
                           c.name,
@@ -1563,37 +1514,31 @@ export default function Page() {
                     );
                   })}
                 </div>
-                {taskCategoryDirty &&
-                  (() => {
-                    const def =
-                      categories.find((c) => c.name === taskCategory) ?? null;
-                    if (!def || def.subcategories.length === 0) return null;
-                    return (
-                      <select
-                        value={taskSubcategory ?? ""}
-                        onChange={(e) =>
-                          setTaskSubcategory(
-                            e.target.value === "" ? null : e.target.value
-                          )
-                        }
-                        className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
-                      >
-                        <option value="">サブカテゴリなし</option>
-                        {def.subcategories.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })()}
-                <button
-                  type="button"
-                  onClick={() => handleRegisterClick()}
-                  className="w-full rounded-xl bg-sky-500 py-4 text-xl font-bold text-white transition hover:bg-sky-400"
-                >
-                  開始
-                </button>
+                {(() => {
+                  if (!awaitingSubFor) return null;
+                  const def =
+                    categories.find((c) => c.name === awaitingSubFor) ?? null;
+                  if (!def || def.subcategories.length === 0) return null;
+                  return (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        startTaskWith(def.name, v === "" ? null : v);
+                      }}
+                      className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                    >
+                      <option value="" disabled>
+                        サブカテゴリを選択して開始...
+                      </option>
+                      {def.subcategories.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1608,10 +1553,7 @@ export default function Page() {
               <p
                 className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
               >
-                {activeLog.category}
-              </p>
-              <p className="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-300">
-                {activeLog.task}
+                {formatCategoryLabel(activeLog.category, activeLog.subcategory)}
               </p>
               {linkedTodos.length > 0 && (
                 <ul className="mt-2 space-y-1 text-xs text-sky-300">
@@ -1996,7 +1938,11 @@ export default function Page() {
           <QuickStartConfirmModal
             category={quickStartCategory}
             subcategory={quickStartSubcategory}
-            endingActiveTaskTitle={activeLog?.task ?? null}
+            endingActiveTaskTitle={
+              activeLog
+                ? formatCategoryLabel(activeLog.category, activeLog.subcategory)
+                : null
+            }
             onConfirm={confirmQuickStart}
             onCancel={cancelQuickStart}
           />

@@ -5,6 +5,7 @@ import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import CompletedTodoPickerModal from "./CompletedTodoPickerModal";
 import type { LogEntry, TodoAllocation, TodoItem } from "@/lib/types";
+import { formatCategoryLabel } from "@/lib/category";
 import type { Category, CategoryDefinition } from "@/lib/category";
 import {
   appendTimestampLine,
@@ -227,7 +228,7 @@ export default function EditPastTaskModal({
       <div className="space-y-4">
         <div className="rounded-xl bg-slate-900 p-3">
           <p className="whitespace-pre-wrap break-words text-base font-semibold">
-            {log.task}
+            {formatCategoryLabel(category, subcategory)}
           </p>
         </div>
 

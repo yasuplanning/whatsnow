@@ -156,6 +156,13 @@ export function findCategory(
   return categories.find((c) => c.name === value) ?? null;
 }
 
+export function formatCategoryLabel(
+  category: string,
+  subcategory: string | null | undefined
+): string {
+  return subcategory ? `${category} / ${subcategory}` : category;
+}
+
 export function getCategoryColor(
   value: string,
   categories: CategoryDefinition[]

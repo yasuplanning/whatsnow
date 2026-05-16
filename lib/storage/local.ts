@@ -192,13 +192,12 @@ function migrateLogEntry(raw: any): LogEntry {
   const endAt = migrateIsoToJst(raw?.endAt);
   const createdAt = migrateIsoToJst(raw?.createdAt) ?? startAt;
   const updatedAt = migrateIsoToJst(raw?.updatedAt) ?? createdAt;
-  const task = typeof raw?.task === "string" ? raw.task : "";
   const memo = typeof raw?.memo === "string" ? raw.memo : "";
   const status = raw?.status === "completed" ? "completed" : "active";
   const category =
     raw?.category !== undefined
       ? normalizeCategory(raw.category)
-      : inferCategoryFromTitleAndMemo(task, memo);
+      : inferCategoryFromTitleAndMemo("", memo);
   const existingDuration =
     typeof raw?.durationMinutes === "number" ? raw.durationMinutes : null;
   const durationMinutes =
@@ -244,7 +243,6 @@ function migrateLogEntry(raw: any): LogEntry {
   return {
     id: typeof raw?.id === "string" ? raw.id : generateId(),
     type: "task",
-    task,
     category,
     subcategory: readSubcategory(raw),
     startAt,

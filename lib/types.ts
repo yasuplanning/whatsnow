@@ -12,7 +12,6 @@ export interface TodoAllocation {
 export interface LogEntry {
   id: string;
   type: "task";
-  task: string;
   category: Category;
   subcategory: string | null;
   startAt: string;

@@ -4,17 +4,12 @@ import { useState } from "react";
 import Modal from "./Modal";
 import CategorySelect from "./CategorySelect";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/time";
-import {
-  inferCategoryFromTitleAndMemo,
-  type Category,
-  type CategoryDefinition,
-} from "@/lib/category";
+import type { Category, CategoryDefinition } from "@/lib/category";
 
 interface Props {
   categories: CategoryDefinition[];
   onClose: () => void;
   onConfirm: (input: {
-    task: string;
     startAt: Date;
     endAt: Date;
     memo: string;
@@ -32,7 +27,6 @@ export default function PastLogModal({
 }: Props) {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const [task, setTask] = useState<string>("");
   const [start, setStart] = useState<string>(toDatetimeLocal(oneHourAgo));
   const [end, setEnd] = useState<string>(toDatetimeLocal(now));
   const [memo, setMemo] = useState<string>("");
@@ -40,29 +34,9 @@ export default function PastLogModal({
     categories[0]?.name ?? "その他"
   );
   const [subcategory, setSubcategory] = useState<string | null>(null);
-  const [categoryDirty, setCategoryDirty] = useState(false);
   const [error, setError] = useState<string>("");
 
-  const handleTaskChange = (next: string) => {
-    setTask(next);
-    if (!categoryDirty) {
-      setCategory(inferCategoryFromTitleAndMemo(next, memo));
-    }
-  };
-
-  const handleMemoChange = (next: string) => {
-    setMemo(next);
-    if (!categoryDirty) {
-      setCategory(inferCategoryFromTitleAndMemo(task, next));
-    }
-  };
-
   const handleSubmit = () => {
-    const trimmedTask = task.trim();
-    if (!trimmedTask) {
-      setError("内容を入力してください。");
-      return;
-    }
     const startDate = fromDatetimeLocal(start);
     const endDate = fromDatetimeLocal(end);
     if (!startDate || !endDate) {
@@ -74,7 +48,6 @@ export default function PastLogModal({
       return;
     }
     onConfirm({
-      task: trimmedTask,
       startAt: startDate,
       endAt: endDate,
       memo,
@@ -86,23 +59,12 @@ export default function PastLogModal({
   return (
     <Modal title="過去の記録を追加" onClose={onClose}>
       <div className="space-y-4">
-        <div className="space-y-2">
-          <label className="block text-sm text-slate-300">やった内容</label>
-          <textarea
-            value={task}
-            onChange={(e) => handleTaskChange(e.target.value)}
-            rows={3}
-            placeholder="例: 打ち合わせ、作業、外出など"
-            className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
-          />
-        </div>
-
         <CategorySelect
           categories={categories}
           value={category}
           onChange={(c) => {
-            setCategoryDirty(true);
             setCategory(c);
+            setSubcategory(null);
           }}
           subcategoryValue={subcategory}
           onSubcategoryChange={setSubcategory}
@@ -134,7 +96,7 @@ export default function PastLogModal({
           <label className="block text-sm text-slate-300">メモ（任意）</label>
           <textarea
             value={memo}
-            onChange={(e) => handleMemoChange(e.target.value)}
+            onChange={(e) => setMemo(e.target.value)}
             rows={3}
             className="w-full resize-none rounded-xl bg-slate-900 px-4 py-3 text-base text-white placeholder:text-slate-500"
           />
