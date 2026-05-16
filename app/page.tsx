@@ -1387,13 +1387,13 @@ export default function Page() {
               What I am doing is...
             </h1>
             <div className="rounded-2xl bg-slate-800 p-5">
-              <p className="whitespace-pre-wrap break-words text-2xl font-semibold leading-relaxed">
-                {activeLog.task}
-              </p>
               <p
-                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs ${getCategoryColor(activeLog.category, categories)}`}
+                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, categories)}`}
               >
                 {activeLog.category}
+              </p>
+              <p className="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-300">
+                {activeLog.task}
               </p>
               {linkedTodos.length > 0 && (
                 <ul className="mt-2 space-y-1 text-xs text-sky-300">
