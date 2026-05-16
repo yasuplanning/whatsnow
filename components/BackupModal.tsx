@@ -8,6 +8,7 @@ import {
   triggerDownload,
   type ImportPreview,
 } from "@/lib/backup";
+import { forcePushLocalToS3 } from "@/lib/storage";
 
 interface Props {
   onClose: () => void;
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export default function BackupModal({ onClose, onImported }: Props) {
-  const [busy, setBusy] = useState<"export" | "import" | null>(null);
+  const [busy, setBusy] = useState<"export" | "import" | "push" | null>(null);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,6 +45,52 @@ export default function BackupModal({ onClose, onImported }: Props) {
   const handlePickFile = () => {
     if (busy) return;
     fileInputRef.current?.click();
+  };
+
+  const handleForcePush = async () => {
+    if (busy) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "この端末のローカルデータでS3を上書きします。\n他端末で行った直近の編集も失われる可能性があります。よろしいですか？"
+      )
+    ) {
+      return;
+    }
+    setBusy("push");
+    setError("");
+    setMessage("");
+    try {
+      const r = await forcePushLocalToS3();
+      if (r.ok) {
+        const photoLine =
+          r.photoTotal > 0
+            ? `\n写真：${r.photoOk}/${r.photoTotal} 件アップロード${
+                r.photoFailed > 0 ? `（失敗 ${r.photoFailed}）` : ""
+              }`
+            : "";
+        setMessage(
+          `S3に上書きしました（version ${r.newVersion ?? "?"}）。${photoLine}`
+        );
+      } else {
+        const detail = r.message ? `\n詳細：${r.message}` : "";
+        if (r.reason === "unconfigured") {
+          setError("S3に接続できていません。設定/環境変数を確認してください。");
+        } else if (r.reason === "conflict") {
+          setError(
+            "競合が解消できませんでした。一度ページを再読み込みしてから、もう一度実行してください。"
+          );
+        } else if (r.reason === "fetchFailed") {
+          setError(`S3のメタ取得に失敗しました。${detail}`);
+        } else {
+          setError(`S3への保存に失敗しました。${detail}`);
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleFileChange = async (
@@ -112,6 +159,23 @@ export default function BackupModal({ onClose, onImported }: Props) {
           onChange={handleFileChange}
           className="hidden"
         />
+
+        <div className="border-t border-slate-700 pt-4">
+          <p className="mb-2 text-xs text-slate-400">
+            この端末のデータでS3を上書きします。ZIPから復元した直後や、
+            S3のデータが古くなっている場合に使用します。
+          </p>
+          <button
+            type="button"
+            onClick={handleForcePush}
+            disabled={busy !== null}
+            className="w-full rounded-xl bg-amber-600 py-4 text-base font-bold text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:bg-slate-800"
+          >
+            {busy === "push"
+              ? "S3に送信中…"
+              : "この端末のデータでS3を上書き"}
+          </button>
+        </div>
 
         {message && (
           <p className="whitespace-pre-wrap rounded-xl bg-slate-900 px-4 py-3 text-sm text-emerald-300">

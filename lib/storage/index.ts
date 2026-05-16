@@ -34,11 +34,13 @@ import {
   getCurrentMeta,
   getMode,
   getSyncStatus,
+  pushLocalNow,
   scheduleSave,
   setSnapshotProvider,
   subscribePhotoUpdate,
   subscribeSyncStatus,
   uploadPhoto,
+  uploadPhotoStrict,
 } from "./s3";
 
 // ---------------------------------------------------------------------------
@@ -198,6 +200,59 @@ export async function flushPendingSaves(): Promise<void> {
 
 export function getSnapshotMeta() {
   return getCurrentMeta();
+}
+
+// Explicit "push this device's local cache up to S3, overwriting whatever
+// is there." Used by the Backup modal's force-push button. Uploads photos
+// first so the new latest.json references valid photo objects, then writes
+// latest.json with a refreshed baseVersion (so it always wins over the
+// remote state).
+export interface ForcePushOutcome {
+  ok: boolean;
+  reason?: "unconfigured" | "fetchFailed" | "saveFailed" | "conflict";
+  message?: string;
+  newVersion?: number;
+  photoTotal: number;
+  photoOk: number;
+  photoFailed: number;
+}
+
+export async function forcePushLocalToS3(): Promise<ForcePushOutcome> {
+  if (getMode() !== "s3") {
+    return {
+      ok: false,
+      reason: "unconfigured",
+      photoTotal: 0,
+      photoOk: 0,
+      photoFailed: 0,
+    };
+  }
+
+  // 1) Re-upload all photos (sequential, with success/failure counts so the
+  //    UI can show a meaningful summary).
+  const photos = Local.getAllPhotos();
+  const ids = Object.keys(photos);
+  let photoOk = 0;
+  let photoFailed = 0;
+  for (const id of ids) {
+    try {
+      await uploadPhotoStrict(id, photos[id]);
+      photoOk += 1;
+    } catch {
+      photoFailed += 1;
+    }
+  }
+
+  // 2) Push latest.json with a freshly refreshed baseVersion so this
+  //    succeeds even if another device pushed in between.
+  const result = await pushLocalNow();
+
+  return {
+    ...result,
+    photoTotal: ids.length,
+    photoOk,
+    photoFailed,
+  };
 }
 
 // ---------------------------------------------------------------------------

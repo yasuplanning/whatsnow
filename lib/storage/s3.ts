@@ -278,6 +278,26 @@ export async function uploadPhoto(
   }
 }
 
+// Strict variant used by force-push: surfaces failures so the caller can
+// report a meaningful count to the user.
+export async function uploadPhotoStrict(
+  photoId: string,
+  dataUrl: string
+): Promise<void> {
+  if (mode !== "s3") throw new Error("S3 mode not active");
+  const res = await fetch(
+    `/api/storage/photo/${encodeURIComponent(photoId)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`photo upload failed: ${res.status}`);
+  }
+}
+
 export async function deletePhotoRemote(photoId: string): Promise<void> {
   if (mode !== "s3") return;
   try {
@@ -317,6 +337,126 @@ export function fetchPhotoIfMissing(
       photoFetchInflight.delete(photoId);
     }
   })();
+}
+
+// ---------------------------------------------------------------------------
+// Explicit "this device wins" push. Used by the BackupModal force-push button.
+// Refreshes meta from S3 first so our baseVersion matches whatever is there,
+// then pushes the local snapshot — effectively overwriting whatever S3 has.
+// Photo re-upload is the caller's responsibility (it can report progress).
+// ---------------------------------------------------------------------------
+
+export type ForcePushReason =
+  | "unconfigured"
+  | "fetchFailed"
+  | "saveFailed"
+  | "conflict";
+
+export interface ForcePushResult {
+  ok: boolean;
+  reason?: ForcePushReason;
+  message?: string;
+  newVersion?: number;
+}
+
+async function refreshMetaFromS3(): Promise<
+  | { ok: true }
+  | { ok: false; reason: "unconfigured" | "fetchFailed"; message?: string }
+> {
+  try {
+    const res = await fetch("/api/storage/load", {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (res.status === 503) {
+      return { ok: false, reason: "unconfigured" };
+    }
+    if (res.status === 404) {
+      currentMeta = { version: 0, etag: null, updatedAt: "", updatedBy: "" };
+      return { ok: true };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: "fetchFailed",
+        message: `${res.status} ${res.statusText}`,
+      };
+    }
+    const json = (await res.json()) as {
+      snapshot: RemoteSnapshot | null;
+      etag?: string | null;
+    };
+    if (json.snapshot && typeof json.snapshot === "object") {
+      currentMeta = {
+        version:
+          typeof json.snapshot.version === "number" ? json.snapshot.version : 0,
+        etag: typeof json.etag === "string" ? json.etag : null,
+        updatedAt:
+          typeof json.snapshot.updatedAt === "string"
+            ? json.snapshot.updatedAt
+            : "",
+        updatedBy:
+          typeof json.snapshot.updatedBy === "string"
+            ? json.snapshot.updatedBy
+            : "",
+      };
+    } else {
+      currentMeta = { version: 0, etag: null, updatedAt: "", updatedBy: "" };
+    }
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      reason: "fetchFailed",
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export async function pushLocalNow(): Promise<ForcePushResult> {
+  if (mode !== "s3" || !pendingSnapshotProvider) {
+    return { ok: false, reason: "unconfigured" };
+  }
+
+  // 1) Settle any inflight save so we don't race against it.
+  if (inflightSave) {
+    try {
+      await inflightSave;
+    } catch {
+      // ignore — we'll resync meta below
+    }
+  }
+
+  // 2) Refresh meta from S3 so the upcoming PUT carries the current
+  //    baseVersion / etag. This is what makes it a "force overwrite":
+  //    whatever happens to be on S3 right now, we will succeed in writing
+  //    on top of it.
+  const refreshed = await refreshMetaFromS3();
+  if (!refreshed.ok) {
+    return {
+      ok: false,
+      reason: refreshed.reason,
+      message: refreshed.message,
+    };
+  }
+
+  // 3) Clear any sticky conflict status so flushSave will proceed.
+  if (getSyncStatus().kind === "conflict") {
+    setStatus({ kind: "idle" });
+  }
+
+  // 4) Mark dirty and flush.
+  dirty = true;
+  await flushSave();
+
+  const final = getSyncStatus();
+  if (final.kind === "conflict") {
+    return { ok: false, reason: "conflict" };
+  }
+  if (final.kind === "saveFailed") {
+    return { ok: false, reason: "saveFailed", message: final.message };
+  }
+  return { ok: true, newVersion: currentMeta?.version };
 }
 
 export { CONFLICT_MESSAGE, LOAD_FAILED_MESSAGE };
