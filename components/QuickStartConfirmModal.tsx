@@ -4,7 +4,7 @@ import Modal from "./Modal";
 
 interface Props {
   category: string;
-  subcategory: string | null;
+  subcategory: string;
   endingActiveTaskTitle?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
@@ -33,7 +33,7 @@ export default function QuickStartConfirmModal({
           </p>
         )}
         <p className="rounded-xl bg-slate-900 px-4 py-3 text-lg font-bold text-white">
-          {subcategory ? `${category} / ${subcategory}` : category}
+          {category} / {subcategory}
         </p>
         <div className="grid grid-cols-2 gap-2 pt-2">
           <button

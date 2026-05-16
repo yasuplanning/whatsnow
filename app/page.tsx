@@ -86,7 +86,6 @@ import {
   type Category,
   type CategoryDefinition,
 } from "@/lib/category";
-import CategorySelect from "@/components/CategorySelect";
 import EventTimelineModal from "@/components/EventTimelineModal";
 import EndModal from "@/components/EndModal";
 import MenuModal from "@/components/MenuModal";
@@ -288,17 +287,14 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!quickStartCategory || quickStartConfirmOpen) return;
-    const hasSub = (quickStartCategoryDef?.subcategories.length ?? 0) > 0;
-    if (hasSub ? !!quickStartSubcategory : true) {
+    if (
+      quickStartCategory &&
+      quickStartSubcategory &&
+      !quickStartConfirmOpen
+    ) {
       setQuickStartConfirmOpen(true);
     }
-  }, [
-    quickStartCategory,
-    quickStartSubcategory,
-    quickStartConfirmOpen,
-    quickStartCategoryDef,
-  ]);
+  }, [quickStartCategory, quickStartSubcategory, quickStartConfirmOpen]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -620,13 +616,11 @@ export default function Page() {
   };
 
   const confirmQuickStart = () => {
-    if (!quickStartCategory) {
+    if (!quickStartCategory || !quickStartSubcategory) {
       cancelQuickStart();
       return;
     }
-    const title = quickStartSubcategory
-      ? `${quickStartCategory} / ${quickStartSubcategory}`
-      : quickStartCategory;
+    const title = `${quickStartCategory} / ${quickStartSubcategory}`;
     const nowIso = nowJstIso();
     void ensureNotificationPermission();
     // 1) If a task is currently active, end it now.
@@ -1389,36 +1383,27 @@ export default function Page() {
   }, [activeLog, photoBust]);
 
   const quickStartSection = (
-    <div className="space-y-3 rounded-2xl bg-slate-800 p-4">
+    <div className="space-y-2 rounded-2xl bg-slate-800 p-4">
       <p className="text-base text-slate-200">TODO作成</p>
       <p className="text-xs text-slate-400">
-        カテゴリを選ぶと自動で ToDo を作成して開始
+        カテゴリとサブカテゴリを選ぶと自動で ToDo を作成して開始
       </p>
-      <div className="flex flex-wrap gap-2">
-        {categories.map((c) => {
-          const selected = quickStartCategory === c.name;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => {
-                setQuickStartCategory(c.name);
-                setQuickStartSubcategory(null);
-              }}
-              className={`rounded-lg px-3 py-2 text-sm font-bold transition ${getCategoryColor(
-                c.name,
-                categories
-              )} ${
-                selected
-                  ? "ring-2 ring-white ring-offset-2 ring-offset-slate-800"
-                  : "opacity-80 hover:opacity-100"
-              }`}
-            >
-              {c.name}
-            </button>
-          );
-        })}
-      </div>
+      <select
+        value={quickStartCategory ?? ""}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQuickStartCategory(v === "" ? null : v);
+          setQuickStartSubcategory(null);
+        }}
+        className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+      >
+        <option value="">カテゴリを選択...</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.name}>
+            {c.name}
+          </option>
+        ))}
+      </select>
       {quickStartCategoryDef &&
         quickStartCategoryDef.subcategories.length > 0 && (
           <select
@@ -1436,6 +1421,12 @@ export default function Page() {
               </option>
             ))}
           </select>
+        )}
+      {quickStartCategoryDef &&
+        quickStartCategoryDef.subcategories.length === 0 && (
+          <p className="text-xs text-slate-500">
+            このカテゴリにはサブカテゴリがありません。
+          </p>
         )}
     </div>
   );
@@ -1522,17 +1513,58 @@ export default function Page() {
                 rows={6}
                 className="w-full resize-none rounded-2xl bg-slate-800 px-4 py-4 text-lg text-white placeholder:text-slate-500"
               />
-              <CategorySelect
-                categories={categories}
-                value={taskCategory}
-                onChange={(c) => {
-                  setTaskCategoryDirty(true);
-                  setTaskCategory(c);
-                  setTaskSubcategory(null);
-                }}
-                subcategoryValue={taskSubcategory}
-                onSubcategoryChange={setTaskSubcategory}
-              />
+              <div className="space-y-2">
+                <label className="block text-sm text-slate-300">カテゴリ</label>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((c) => {
+                    const selected = taskCategory === c.name;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setTaskCategoryDirty(true);
+                          setTaskCategory(c.name);
+                          setTaskSubcategory(null);
+                        }}
+                        className={`rounded-lg px-3 py-2 text-sm font-bold transition ${getCategoryColor(
+                          c.name,
+                          categories
+                        )} ${
+                          selected
+                            ? "ring-2 ring-white ring-offset-2 ring-offset-slate-950"
+                            : "opacity-80 hover:opacity-100"
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const def =
+                    categories.find((c) => c.name === taskCategory) ?? null;
+                  if (!def || def.subcategories.length === 0) return null;
+                  return (
+                    <select
+                      value={taskSubcategory ?? ""}
+                      onChange={(e) =>
+                        setTaskSubcategory(
+                          e.target.value === "" ? null : e.target.value
+                        )
+                      }
+                      className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base text-white"
+                    >
+                      <option value="">サブカテゴリなし</option>
+                      {def.subcategories.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
+              </div>
               <button
                 type="button"
                 onClick={handleRegisterClick}
