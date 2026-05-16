@@ -600,17 +600,12 @@ export default function Page() {
     setQuickStartSubcategory(null);
   };
 
-  const confirmQuickStart = () => {
-    if (!quickStartCategory || !quickStartSubcategory) {
-      cancelQuickStart();
-      return;
-    }
-    const title = `${quickStartCategory} / ${quickStartSubcategory}`;
-    const nowIso = nowJstIso();
+  // Shared core: end current activeLog (if any) and start a new task linked
+  // to the given ToDo. Used by both confirmQuickStart (new ToDo) and
+  // handleQuickPickTodo (existing ToDo).
+  const startTaskLinkedToTodo = (todo: TodoItem) => {
     void ensureNotificationPermission();
-    // 1) If a task is currently active, end it now.
-    //    Followup queue is intentionally NOT triggered here: this flow is a
-    //    quick pivot, not an explicit stop-and-reflect.
+    const nowIso = nowJstIso();
     let baseLogs = logs;
     if (activeLog) {
       const ended: LogEntry = {
@@ -623,7 +618,39 @@ export default function Page() {
       baseLogs = upsertLog(baseLogs, ended);
       plannedEndNotifiedRef.current.delete(activeLog.id);
     }
-    // 2) Create the new ToDo.
+    const entry: LogEntry = {
+      id: generateId(),
+      type: "task",
+      category: todo.category,
+      subcategory: todo.subcategory,
+      durationMinutes: null,
+      startAt: nowIso,
+      plannedEndAt: null,
+      endAt: null,
+      memo: "",
+      status: "active",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      todoId: todo.id,
+      todoIds: [todo.id],
+      deductionMinutes: 0,
+      todoAllocations: normalizeAllocations([todo.id], []),
+      photoIds: [],
+    };
+    persist(upsertLog(baseLogs, entry));
+    setPendingTodoIds([]);
+    setAwaitingSubFor(null);
+    setPhase({ kind: "active" });
+    markActivity();
+  };
+
+  const confirmQuickStart = () => {
+    if (!quickStartCategory || !quickStartSubcategory) {
+      cancelQuickStart();
+      return;
+    }
+    const title = `${quickStartCategory} / ${quickStartSubcategory}`;
+    const nowIso = nowJstIso();
     const newTodo: TodoItem = {
       id: generateId(),
       title,
@@ -639,34 +666,11 @@ export default function Page() {
       important: false,
       alerts: [],
     };
-    const nextTodos = addTodo(todos, newTodo);
-    persistTodos(nextTodos);
-    // 3) Start the new active task linked to the ToDo.
-    const entry: LogEntry = {
-      id: generateId(),
-      type: "task",
-      category: quickStartCategory,
-      subcategory: quickStartSubcategory,
-      durationMinutes: null,
-      startAt: nowIso,
-      plannedEndAt: null,
-      endAt: null,
-      memo: "",
-      status: "active",
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      todoId: newTodo.id,
-      todoIds: [newTodo.id],
-      deductionMinutes: 0,
-      todoAllocations: normalizeAllocations([newTodo.id], []),
-      photoIds: [],
-    };
-    persist(upsertLog(baseLogs, entry));
+    persistTodos(addTodo(todos, newTodo));
+    startTaskLinkedToTodo(newTodo);
     setQuickStartConfirmOpen(false);
     setQuickStartCategory(null);
     setQuickStartSubcategory(null);
-    setPhase({ kind: "active" });
-    markActivity();
   };
 
   const handleEditPastTaskConfirm = (input: {
@@ -902,30 +906,8 @@ export default function Page() {
   };
 
   const handleQuickPickTodo = (todo: TodoItem) => {
-    if (activeLog) {
-      handleLinkTodoToActive(todo.id);
-      setTodoManageOpen(false);
-      return;
-    }
-    setPendingTodoIds((prev) =>
-      prev.includes(todo.id) ? prev : [...prev, todo.id]
-    );
+    startTaskLinkedToTodo(todo);
     setTodoManageOpen(false);
-  };
-
-  const handleLinkTodoToActive = (todoId: string) => {
-    if (!activeLog) return;
-    if (activeLog.todoIds.includes(todoId)) return;
-    const nowIso = nowJstIso();
-    const nextIds = [...activeLog.todoIds, todoId];
-    const updated: LogEntry = {
-      ...activeLog,
-      todoId: activeLog.todoId ?? todoId,
-      todoIds: nextIds,
-      todoAllocations: normalizeAllocations(nextIds, activeLog.todoAllocations),
-      updatedAt: nowIso,
-    };
-    persist(upsertLog(logs, updated));
   };
 
   const handleUnlinkTodoFromActive = (todoId: string) => {
