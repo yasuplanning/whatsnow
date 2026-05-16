@@ -219,6 +219,20 @@ export default function Page() {
     [categories, quickStartCategory]
   );
 
+  // ToDo categories are auto-mirrored into the log category list. Log-only
+  // entries are appended only when their name does not collide with a ToDo
+  // category (ToDo wins on duplicates).
+  const effectiveLogCategories = useMemo<CategoryDefinition[]>(() => {
+    const todoNames = new Set(categories.map((c) => c.name));
+    const extras = logCategories.filter((c) => !todoNames.has(c.name));
+    return [...categories.map((c) => ({ ...c, subcategories: [] })), ...extras];
+  }, [categories, logCategories]);
+
+  const todoCategoryNameSet = useMemo(
+    () => new Set(categories.map((c) => c.name)),
+    [categories]
+  );
+
   const activeLog = useMemo(() => findActiveLog(logs), [logs]);
   const pendingTodos = useMemo(
     () =>
@@ -558,6 +572,11 @@ export default function Page() {
       persistLogCategories([...logCategories, newCat]);
     } else {
       const prev = logCategoryForm.item;
+      // Mirror of a ToDo category — managed on the ToDo side, no-op here.
+      if (todoCategoryNameSet.has(prev.name)) {
+        setLogCategoryForm(null);
+        return;
+      }
       const updated: CategoryDefinition = {
         ...prev,
         name: input.name,
@@ -582,6 +601,11 @@ export default function Page() {
     if (!logCategoryForm || logCategoryForm.mode !== "edit") return;
     const target = logCategoryForm.item;
     if (target.name === "その他") return;
+    // ToDo-mirrored entries cannot be deleted from the log side.
+    if (todoCategoryNameSet.has(target.name)) {
+      setLogCategoryForm(null);
+      return;
+    }
     persistLogCategories(logCategories.filter((c) => c.id !== target.id));
     rewriteLogCategoryRefs({
       renameFromTo: null,
@@ -708,7 +732,7 @@ export default function Page() {
     const entry: LogEntry = {
       id: generateId(),
       type: "log",
-      category: resolveLogCategory(todo.category, logCategories),
+      category: resolveLogCategory(todo.category, effectiveLogCategories),
       durationMinutes: null,
       startAt: nowIso,
       plannedEndAt: null,
@@ -1550,14 +1574,14 @@ export default function Page() {
                   カテゴリを選ぶとそのまま開始
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {logCategories.map((c) => (
+                  {effectiveLogCategories.map((c) => (
                     <button
-                      key={c.id}
+                      key={`${c.id}-${c.name}`}
                       type="button"
                       onClick={() => startTaskWith(c.name)}
                       className={`rounded-lg px-3 py-2 text-sm font-bold transition opacity-80 hover:opacity-100 ${getCategoryColor(
                         c.name,
-                        logCategories
+                        effectiveLogCategories
                       )}`}
                     >
                       {c.name}
@@ -1604,7 +1628,7 @@ export default function Page() {
             {/* TASK area */}
             <div className="space-y-4 rounded-2xl bg-slate-800 p-5">
               <p
-                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, logCategories)}`}
+                className={`inline-block rounded-lg px-3 py-1 text-2xl font-bold ${getCategoryColor(activeLog.category, effectiveLogCategories)}`}
               >
                 {activeLog.category}
               </p>
@@ -1747,7 +1771,7 @@ export default function Page() {
       {aggregateOpen && (
         <AggregateModal
           categories={categories}
-          logCategories={logCategories}
+          logCategories={effectiveLogCategories}
           logs={logs}
           todos={todos}
           onClose={() => setAggregateOpen(false)}
@@ -1793,8 +1817,9 @@ export default function Page() {
       )}
       {logCategoryManageOpen && !logCategoryForm && (
         <CategoryManageModal
-          categories={logCategories}
+          categories={effectiveLogCategories}
           kind="log"
+          readOnlyNames={todoCategoryNameSet}
           onClose={() => setLogCategoryManageOpen(false)}
           onAdd={() => setLogCategoryForm({ mode: "add" })}
           onEdit={(c) => setLogCategoryForm({ mode: "edit", item: c })}
@@ -1805,7 +1830,7 @@ export default function Page() {
           initial={
             logCategoryForm.mode === "edit" ? logCategoryForm.item : null
           }
-          existingNames={logCategories.map((c) => c.name)}
+          existingNames={effectiveLogCategories.map((c) => c.name)}
           kind="log"
           onClose={() => setLogCategoryForm(null)}
           onSubmit={handleLogCategorySubmit}
@@ -1837,7 +1862,7 @@ export default function Page() {
       )}
       {pastOpen && (
         <PastLogModal
-          categories={logCategories}
+          categories={effectiveLogCategories}
           onClose={() => setPastOpen(false)}
           onConfirm={handleAddPast}
         />
@@ -1856,7 +1881,7 @@ export default function Page() {
       )}
       {editOpen && activeLog && (
         <EditActiveTaskModal
-          categories={logCategories}
+          categories={effectiveLogCategories}
           log={activeLog}
           onClose={() => setEditOpen(false)}
           onConfirm={handleEditActive}
@@ -1976,7 +2001,7 @@ export default function Page() {
             <EditPastTaskModal
               log={target}
               todos={todos}
-              categories={logCategories}
+              categories={effectiveLogCategories}
               onClose={() => setEditPastLogId(null)}
               onConfirm={handleEditPastTaskConfirm}
             />
